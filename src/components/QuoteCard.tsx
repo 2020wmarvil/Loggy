@@ -1,13 +1,17 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { getDailyQuote } from '@/lib/progression';
+import { useAppData } from '@/store/AppDataContext';
 import { useTheme } from '@/theme/ThemeContext';
 import { radii } from '@/theme/tokens';
-import { getDailyQuote } from '@/lib/progression';
 
 export function QuoteCard({ today }: { today: Date }) {
   const theme = useTheme();
-  const q = getDailyQuote(today);
+  const { aphorisms } = useAppData();
+  const q = getDailyQuote(today, aphorisms);
+
+  if (!q) return null;
 
   return (
     <View

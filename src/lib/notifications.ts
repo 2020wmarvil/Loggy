@@ -1,18 +1,36 @@
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 
 import { RoutineData } from '@/data/types';
 import { getRoutineForDay } from '@/lib/routine';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// expo-notifications registers a push-token-change listener as a top-level
+// side effect of merely importing it, and that registration itself throws
+// on Android in Expo Go (remote notifications were removed from Expo Go in
+// SDK 53). So the module can't even be statically imported here — it must
+// be required lazily, only when notifications are actually usable, or the
+// throw happens during import and crashes every screen that (transitively)
+// imports this file. A development build is required for real notification
+// testing; this file is a no-op in Expo Go.
+const notificationsAvailable = Constants.executionEnvironment !== 'storeClient';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Notifications: typeof import('expo-notifications') | null = notificationsAvailable
+  ? require('expo-notifications')
+  : null;
+
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (!Notifications) return false;
   try {
     const current = await Notifications.getPermissionsAsync();
     if (current.status === 'granted') return true;
@@ -24,6 +42,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export async function cancelRoutineNotifications(ids: Record<string, string>): Promise<void> {
+  if (!Notifications) return;
   try {
     await Promise.all(Object.values(ids).map((id) => Notifications.cancelScheduledNotificationAsync(id)));
   } catch {
@@ -36,6 +55,7 @@ export async function cancelRoutineNotifications(ids: Record<string, string>): P
 // notification-id map to persist for later cancellation/rescheduling.
 export async function scheduleRoutineNotifications(routine: RoutineData): Promise<Record<string, string>> {
   const ids: Record<string, string> = {};
+  if (!Notifications) return ids;
   try {
     for (let dow = 0; dow <= 6; dow++) {
       for (const item of getRoutineForDay(routine, dow)) {

@@ -1,6 +1,5 @@
 import { Program, Session, Exercise, Logs, LogEntry, SetEntry, Goal, Quote } from '@/data/types';
 import { toDateStr, parseDate, fmtShort } from '@/lib/date';
-import { QUOTES } from '@/data/quotes';
 
 export function getSession(program: Program, sessionId: string): Session | undefined {
   return program.sessions.find((s) => s.id === sessionId);
@@ -111,9 +110,10 @@ export function calcVolume(sets: SetEntry[]): number {
   return sets.reduce((a, s) => a + (s.weight > 0 ? s.weight * s.reps : s.reps), 0);
 }
 
-export function getDailyQuote(date: Date): Quote {
+export function getDailyQuote(date: Date, quotes: Quote[]): Quote | undefined {
+  if (!quotes.length) return undefined;
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date.getTime() - start.getTime();
   const dayOfYear = Math.floor(diff / 86400000);
-  return QUOTES[dayOfYear % QUOTES.length];
+  return quotes[dayOfYear % quotes.length];
 }

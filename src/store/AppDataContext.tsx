@@ -2,7 +2,7 @@ import React, { createContext, useContext } from 'react';
 
 import { useAsyncStorageState, StorageKeys } from '@/lib/storage';
 import { toDateStr } from '@/lib/date';
-import { Session, RoutineData, RoutineChecks, Logs, Settings, NoteEntry, MaxEntry } from '@/data/types';
+import { Session, RoutineData, RoutineChecks, Logs, Settings, NoteEntry, MaxEntry, Quote } from '@/data/types';
 import { defaultLiftingSessions } from '@/data/defaultProgram';
 import { defaultRoutine } from '@/data/defaultRoutine';
 import { AXIOMS } from '@/data/axioms';
@@ -19,6 +19,9 @@ interface AppDataContextValue {
   philosophy: NoteEntry[]; setPhilosophy: Updater<NoteEntry[]>;
   maxes: MaxEntry[]; setMaxes: Updater<MaxEntry[]>;
   notificationIds: Record<string, string>; setNotificationIds: Updater<Record<string, string>>;
+  aphorisms: Quote[]; setAphorisms: Updater<Quote[]>;
+  aphorismSheetUrl: string | null; setAphorismSheetUrl: Updater<string | null>;
+  aphorismSyncedAt: string | null; setAphorismSyncedAt: Updater<string | null>;
   hydrated: boolean;
 }
 
@@ -40,6 +43,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [philosophy, setPhilosophy, h7] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Philosophy, philosophySeed);
   const [maxes, setMaxes, h8] = useAsyncStorageState<MaxEntry[]>(StorageKeys.Maxes, []);
   const [notificationIds, setNotificationIds, h9] = useAsyncStorageState<Record<string, string>>(StorageKeys.NotificationIds, {});
+  const [aphorisms, setAphorisms, h10] = useAsyncStorageState<Quote[]>(StorageKeys.Aphorisms, []);
+  const [aphorismSheetUrl, setAphorismSheetUrl, h11] = useAsyncStorageState<string | null>(StorageKeys.AphorismSheetUrl, null);
+  const [aphorismSyncedAt, setAphorismSyncedAt, h12] = useAsyncStorageState<string | null>(StorageKeys.AphorismSyncedAt, null);
 
   const value: AppDataContextValue = {
     liftingSessions, setLiftingSessions,
@@ -51,7 +57,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     philosophy, setPhilosophy,
     maxes, setMaxes,
     notificationIds, setNotificationIds,
-    hydrated: h1 && h2 && h3 && h4 && h5 && h6 && h7 && h8 && h9,
+    aphorisms, setAphorisms,
+    aphorismSheetUrl, setAphorismSheetUrl,
+    aphorismSyncedAt, setAphorismSyncedAt,
+    hydrated: h1 && h2 && h3 && h4 && h5 && h6 && h7 && h8 && h9 && h10 && h11 && h12,
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

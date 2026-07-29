@@ -1,9 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -13,7 +15,14 @@ import {
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  SharedValue,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
@@ -23,6 +32,14 @@ import { useTheme } from '@/theme/ThemeContext';
 import { noteFontSizes, radii, tabBarHeight } from '@/theme/tokens';
 
 const LONG_PRESS_MS = 350;
+const AUTO_SCROLL_EDGE_ZONE = 60;
+const AUTO_SCROLL_STEP = 14;
+const AUTO_SCROLL_INTERVAL_MS = 16;
+const LIST_GAP = 8;
+const SHIFT_SPRING = { damping: 22, stiffness: 260, mass: 0.6 };
+
+type Layout = { y: number; height: number };
+type DragInfo = { id: string; y: number; height: number };
 
 interface EditableNotesListProps {
   list: NoteEntry[];
@@ -49,18 +66,36 @@ function confirmDelete(onConfirm: () => void) {
 
 interface NoteRowProps {
   note: NoteEntry;
-  isActive: boolean;
+  dragInfo: DragInfo | null;
+  myLayout: Layout | undefined;
   theme: ReturnType<typeof useTheme>;
   sizes: (typeof noteFontSizes)[NotesFontSize];
+  rawTranslateY: SharedValue<number>;
+  scrollDelta: SharedValue<number>;
   onLayout: (id: string, y: number, height: number) => void;
   onBeginEdit: (n: NoteEntry) => void;
   onDelete: (id: string) => void;
   onDragStart: (id: string) => void;
+  onDragUpdate: (absoluteY: number) => void;
   onDragEnd: (id: string, translationY: number) => void;
 }
 
-function NoteRow({ note, isActive, theme, sizes, onLayout, onBeginEdit, onDelete, onDragStart, onDragEnd }: NoteRowProps) {
-  const translateY = useSharedValue(0);
+function NoteRow({
+  note,
+  dragInfo,
+  myLayout,
+  theme,
+  sizes,
+  rawTranslateY,
+  scrollDelta,
+  onLayout,
+  onBeginEdit,
+  onDelete,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
+}: NoteRowProps) {
+  const isActive = dragInfo?.id === note.id;
 
   const handleLayout = (e: LayoutChangeEvent) => {
     onLayout(note.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height);
@@ -73,20 +108,38 @@ function NoteRow({ note, isActive, theme, sizes, onLayout, onBeginEdit, onDelete
   const pan = Gesture.Pan()
     .activateAfterLongPress(LONG_PRESS_MS)
     .onStart(() => {
+      rawTranslateY.value = 0;
       runOnJS(onDragStart)(note.id);
     })
     .onUpdate((e) => {
-      translateY.value = e.translationY;
+      rawTranslateY.value = e.translationY;
+      runOnJS(onDragUpdate)(e.absoluteY);
     })
     .onEnd((e) => {
-      translateY.value = withSpring(0);
       runOnJS(onDragEnd)(note.id, e.translationY);
+      rawTranslateY.value = withSpring(0);
     });
 
   const gesture = Gesture.Exclusive(pan, tap);
 
+  // While another row is being dragged, spring this row out of the way once
+  // the dragged card's center has crossed past it — makes room to "land" in.
+  const shiftY = useDerivedValue(() => {
+    if (!dragInfo || isActive || !myLayout) return withSpring(0, SHIFT_SPRING);
+    const gap = dragInfo.height + LIST_GAP;
+    const draggedCenter = dragInfo.y + rawTranslateY.value + scrollDelta.value + dragInfo.height / 2;
+    const myCenter = myLayout.y + myLayout.height / 2;
+    let target = 0;
+    if (myLayout.y > dragInfo.y) {
+      target = draggedCenter < myCenter ? -gap : 0;
+    } else if (myLayout.y < dragInfo.y) {
+      target = draggedCenter > myCenter ? gap : 0;
+    }
+    return withSpring(target, SHIFT_SPRING);
+  }, [dragInfo, isActive, myLayout]);
+
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: isActive ? rawTranslateY.value + scrollDelta.value : shiftY.value }],
   }));
 
   return (
@@ -136,9 +189,26 @@ export function EditableNotesList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftText, setDraftText] = useState('');
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
   const draftRef = useRef({ title: '', text: '' });
-  const layoutsRef = useRef<Record<string, { y: number; height: number }>>({});
+  const layoutsRef = useRef<Record<string, Layout>>({});
+  const rawTranslateY = useSharedValue(0);
+  const scrollDelta = useSharedValue(0);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef(0);
+  const scrollOffsetAtDragStartRef = useRef(0);
+  const containerBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
+  const containerHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const autoScrollDirectionRef = useRef<1 | -1 | 0>(0);
+  const autoScrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current);
+    };
+  }, []);
 
   // Every change is written straight to storage (not just debounced) so a
   // note survives even if the app is backgrounded or killed mid-edit.
@@ -186,16 +256,70 @@ export function EditableNotesList({
     layoutsRef.current[id] = { y, height };
   };
 
+  const stopAutoScroll = () => {
+    autoScrollDirectionRef.current = 0;
+    if (autoScrollTimerRef.current) {
+      clearInterval(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+  };
+
+  const startAutoScroll = (direction: 1 | -1) => {
+    if (autoScrollDirectionRef.current === direction) return;
+    autoScrollDirectionRef.current = direction;
+    if (autoScrollTimerRef.current) return;
+    autoScrollTimerRef.current = setInterval(() => {
+      const dir = autoScrollDirectionRef.current;
+      if (!dir) return;
+      const maxOffset = Math.max(0, contentHeightRef.current - containerHeightRef.current);
+      const next = Math.max(0, Math.min(maxOffset, scrollOffsetRef.current + dir * AUTO_SCROLL_STEP));
+      if (next === scrollOffsetRef.current) return;
+      scrollOffsetRef.current = next;
+      scrollRef.current?.scrollTo({ y: next, animated: false });
+      scrollDelta.value = next - scrollOffsetAtDragStartRef.current;
+    }, AUTO_SCROLL_INTERVAL_MS);
+  };
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+  };
+
   const handleDragStart = (id: string) => {
-    setActiveDragId(id);
+    const layout = layoutsRef.current[id];
+    setDragInfo(layout ? { id, y: layout.y, height: layout.height } : null);
+    scrollDelta.value = 0;
+    scrollOffsetAtDragStartRef.current = scrollOffsetRef.current;
+    // ScrollView forwards `measure` from its underlying native view at runtime,
+    // but the type definitions don't expose it on the ScrollView class.
+    type MeasureFn = (cb: (x: number, y: number, w: number, h: number, pageX: number, pageY: number) => void) => void;
+    (scrollRef.current as unknown as { measure?: MeasureFn })?.measure?.((_x, _y, _w, h, _pageX, pageY) => {
+      containerBoundsRef.current = { top: pageY, bottom: pageY + h };
+    });
+  };
+
+  const handleDragUpdate = (absoluteY: number) => {
+    const bounds = containerBoundsRef.current;
+    if (!bounds) return;
+    if (absoluteY < bounds.top + AUTO_SCROLL_EDGE_ZONE) {
+      startAutoScroll(-1);
+    } else if (absoluteY > bounds.bottom - AUTO_SCROLL_EDGE_ZONE) {
+      startAutoScroll(1);
+    } else {
+      stopAutoScroll();
+    }
   };
 
   const handleDragEnd = (id: string, translationY: number) => {
-    setActiveDragId(null);
+    stopAutoScroll();
+    setDragInfo(null);
     const dragged = layoutsRef.current[id];
     const fromIndex = list.findIndex((n) => n.id === id);
-    if (!dragged || fromIndex === -1) return;
-    const draggedCenter = dragged.y + translationY + dragged.height / 2;
+    if (!dragged || fromIndex === -1) {
+      scrollDelta.value = 0;
+      return;
+    }
+    const netTranslation = translationY + scrollDelta.value;
+    const draggedCenter = dragged.y + netTranslation + dragged.height / 2;
 
     // Find where the dragged item's current center falls among the OTHER
     // items (dragged item excluded), then insert it there.
@@ -209,6 +333,7 @@ export function EditableNotesList({
         break;
       }
     }
+    scrollDelta.value = 0;
     const next = others.slice();
     next.splice(targetIndex, 0, list[fromIndex]);
     reorder(next);
@@ -227,18 +352,35 @@ export function EditableNotesList({
       {list.length === 0 ? (
         <Text style={[styles.empty, { color: theme.muted }]}>{emptyText}</Text>
       ) : (
-        <ScrollView contentContainerStyle={styles.list} style={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.list}
+          style={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onScroll={handleScroll}
+          onLayout={(e) => {
+            containerHeightRef.current = e.nativeEvent.layout.height;
+          }}
+          onContentSizeChange={(_w, h) => {
+            contentHeightRef.current = h;
+          }}
+        >
           {list.map((n) => (
             <NoteRow
               key={n.id}
               note={n}
-              isActive={activeDragId === n.id}
+              dragInfo={dragInfo}
+              myLayout={layoutsRef.current[n.id]}
               theme={theme}
               sizes={sizes}
+              rawTranslateY={rawTranslateY}
+              scrollDelta={scrollDelta}
               onLayout={registerLayout}
               onBeginEdit={beginEdit}
               onDelete={(id) => confirmDelete(() => remove(id))}
               onDragStart={handleDragStart}
+              onDragUpdate={handleDragUpdate}
               onDragEnd={handleDragEnd}
             />
           ))}
@@ -292,7 +434,7 @@ const styles = StyleSheet.create({
   newBtnText: { fontSize: 12.5, fontWeight: '600' },
   empty: { padding: 50, textAlign: 'center', fontSize: 13.5 },
   scroll: { flex: 1 },
-  list: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: tabBarHeight + 16, gap: 8 },
+  list: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: tabBarHeight + 16, gap: LIST_GAP },
   card: { borderRadius: radii.card, borderWidth: 1, padding: 14 },
   cardActive: { elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, zIndex: 10 },
   cardTitle: { fontWeight: '700', letterSpacing: -0.17, marginBottom: 6 },

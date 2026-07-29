@@ -1,4 +1,4 @@
-export type ExerciseType = 'weighted' | 'bodyweight' | 'time';
+export type ExerciseType = 'weighted' | 'time';
 
 export interface Exercise {
   id: string;

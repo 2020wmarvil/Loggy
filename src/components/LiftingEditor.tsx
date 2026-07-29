@@ -11,8 +11,8 @@ import { radii, weight650 } from '@/theme/tokens';
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DLET: Record<number, string> = { 0: 'Su', 1: 'Mo', 2: 'Tu', 3: 'We', 4: 'Th', 5: 'Fr', 6: 'Sa' };
 const DFULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const EX_TYPES: ExerciseType[] = ['weighted', 'bodyweight', 'time'];
-const TYPE_LABEL: Record<ExerciseType, string> = { weighted: 'Wt', bodyweight: 'BW', time: 'Time' };
+const EX_TYPES: ExerciseType[] = ['weighted', 'time'];
+const TYPE_LABEL: Record<ExerciseType, string> = { weighted: 'Weighted', time: 'Time' };
 
 export function LiftingEditor() {
   const theme = useTheme();
@@ -147,10 +147,14 @@ function ExerciseEditRow({
       </View>
       <View style={styles.exNums}>
         <NumField label="Sets" value={ex.sets} onChange={(v) => onChange('sets', v)} theme={theme} />
-        <NumField label="Min" value={ex.repMin} onChange={(v) => onChange('repMin', v)} theme={theme} />
-        <NumField label="Max" value={ex.repMax} onChange={(v) => onChange('repMax', v)} theme={theme} />
-        <NumField label="Incr" value={ex.increment} onChange={(v) => onChange('increment', v)} theme={theme} />
-        <NumField label="Start" value={ex.startWeight} onChange={(v) => onChange('startWeight', v)} theme={theme} />
+        <NumField label={ex.type === 'time' ? 'Min s' : 'Min'} value={ex.repMin} onChange={(v) => onChange('repMin', v)} theme={theme} />
+        <NumField label={ex.type === 'time' ? 'Max s' : 'Max'} value={ex.repMax} onChange={(v) => onChange('repMax', v)} theme={theme} />
+        {ex.type === 'weighted' && (
+          <>
+            <NumField label="Incr" value={ex.increment} onChange={(v) => onChange('increment', v)} theme={theme} />
+            <NumField label="Start" value={ex.startWeight} onChange={(v) => onChange('startWeight', v)} theme={theme} />
+          </>
+        )}
         <View style={styles.typeField}>
           <Text style={[styles.fieldLabel, { color: theme.muted2 }]}>Type</Text>
           <View style={styles.typeChips}>

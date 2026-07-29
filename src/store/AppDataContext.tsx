@@ -1,11 +1,7 @@
 import React, { createContext, useContext } from 'react';
 
 import { useAsyncStorageState, StorageKeys } from '@/lib/storage';
-import { toDateStr } from '@/lib/date';
 import { Session, RoutineData, RoutineChecks, Logs, Settings, NoteEntry, MaxEntry, Quote } from '@/data/types';
-import { defaultLiftingSessions } from '@/data/defaultProgram';
-import { defaultRoutine } from '@/data/defaultRoutine';
-import { AXIOMS } from '@/data/axioms';
 
 type Updater<T> = (next: T | ((prev: T) => T)) => void;
 
@@ -29,18 +25,14 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 const SETTINGS_DEFAULTS: Settings = { notifEnabled: false, accent: 'green', showWeather: true };
 
-const philosophySeed: NoteEntry[] = [
-  { id: 'seed-0', title: 'Axioms', text: AXIOMS.map((a) => `• ${a}`).join('\n'), updatedAt: toDateStr(new Date()) },
-];
-
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
-  const [liftingSessions, setLiftingSessions, h1] = useAsyncStorageState<Session[]>(StorageKeys.LiftingProgram, defaultLiftingSessions);
-  const [routine, setRoutine, h2] = useAsyncStorageState<RoutineData>(StorageKeys.Routine, defaultRoutine);
+  const [liftingSessions, setLiftingSessions, h1] = useAsyncStorageState<Session[]>(StorageKeys.LiftingProgram, []);
+  const [routine, setRoutine, h2] = useAsyncStorageState<RoutineData>(StorageKeys.Routine, {});
   const [routineChecks, setRoutineChecks, h3] = useAsyncStorageState<RoutineChecks>(StorageKeys.RoutineChecks, {});
   const [logs, setLogs, h4] = useAsyncStorageState<Logs>(StorageKeys.Logs, {});
   const [settings, setSettings, h5] = useAsyncStorageState<Settings>(StorageKeys.Settings, SETTINGS_DEFAULTS);
   const [notes, setNotes, h6] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Notes, []);
-  const [philosophy, setPhilosophy, h7] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Philosophy, philosophySeed);
+  const [philosophy, setPhilosophy, h7] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Philosophy, []);
   const [maxes, setMaxes, h8] = useAsyncStorageState<MaxEntry[]>(StorageKeys.Maxes, []);
   const [notificationIds, setNotificationIds, h9] = useAsyncStorageState<Record<string, string>>(StorageKeys.NotificationIds, {});
   const [aphorisms, setAphorisms, h10] = useAsyncStorageState<Quote[]>(StorageKeys.Aphorisms, []);

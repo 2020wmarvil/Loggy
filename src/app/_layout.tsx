@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   useFonts,
   DMSans_400Regular,
@@ -34,16 +35,18 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AppDataProvider>
-      <ThemeProvider>
-        <View style={{ flex: 1, backgroundColor: palette.bg }}>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="logger/[programId]/[sessionId]" options={{ animation: 'slide_from_right' }} />
-          </Stack>
-        </View>
-      </ThemeProvider>
-    </AppDataProvider>
+    <SafeAreaProvider>
+      <AppDataProvider>
+        <ThemeProvider>
+          <View style={{ flex: 1, backgroundColor: palette.bg }}>
+            <StatusBar style="light" />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="logger/[programId]/[sessionId]" options={{ animation: 'slide_from_right' }} />
+            </Stack>
+          </View>
+        </ThemeProvider>
+      </AppDataProvider>
+    </SafeAreaProvider>
   );
 }

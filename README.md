@@ -65,13 +65,40 @@ If you still need a tunnel (e.g. a genuinely restrictive network), see the
 workarounds in the issue linked above — a personal ngrok account or a
 `cloudflared` tunnel now work more reliably than `expo start --tunnel`.
 
+## Building a standalone APK
+
+There's no local Android SDK set up for this project, so builds go through
+[EAS Build](https://docs.expo.dev/build/introduction/) (Expo's free cloud
+build service) instead of `expo run:android`. The `preview` profile in
+`eas.json` is configured to produce a plain installable `.apk` — a fully
+standalone build (JS bundle embedded at build time), not a dev-client build,
+so it opens straight to the real app with no Metro server or computer needed
+afterward.
+
+```bash
+npm install --global eas-cli
+eas login
+eas build --platform android --profile preview
+```
+
+`eas login` opens a browser to sign in / create a free Expo account. The
+first `eas build` run will offer to link/create an EAS project for
+Loggy — accept it. The cloud build takes roughly 10–15 minutes; the CLI
+prints a build URL you can also open in a browser to watch progress.
+
+Once it finishes, open that build URL (or scan the QR code EAS prints)
+directly on your phone and tap **Install** — same "allow installs from this
+browser" permission as sideloading Expo Go. `expo-notifications` also only
+works correctly in a build like this, not in Expo Go.
+
 ## Project layout
 
 ```
 src/
   app/        expo-router screens (tabs + the workout logger)
   components/ shared UI components
-  data/       default program/routine seed data + shared types
+  data/       shared types + small fixed config (routine tag labels/colors,
+              the lifting program's id) — no seed content; the app ships empty
   lib/        pure helpers (dates, progression math, storage, weather, notifications)
   store/      AsyncStorage-backed hooks (one per data domain)
   theme/      color tokens, spacing, ThemeContext

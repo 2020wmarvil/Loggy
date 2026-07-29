@@ -23,7 +23,7 @@ interface AppDataContextValue {
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
-const SETTINGS_DEFAULTS: Settings = { notifEnabled: false, accent: 'green', showWeather: true };
+const SETTINGS_DEFAULTS: Settings = { notifEnabled: false, accent: 'green', showWeather: true, notesFontSize: 'medium' };
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [liftingSessions, setLiftingSessions, h1] = useAsyncStorageState<Session[]>(StorageKeys.LiftingProgram, []);

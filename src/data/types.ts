@@ -75,10 +75,13 @@ export interface Quote {
   attr?: string;
 }
 
+export type NotesFontSize = 'small' | 'medium' | 'large';
+
 export interface Settings {
   notifEnabled: boolean;
   accent: string;
   showWeather: boolean;
+  notesFontSize: NotesFontSize;
 }
 
 export interface Goal {

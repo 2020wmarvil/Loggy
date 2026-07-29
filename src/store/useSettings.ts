@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 
 import { useAppData } from '@/store/AppDataContext';
+import { NotesFontSize } from '@/data/types';
 import {
   cancelRoutineNotifications,
   requestNotificationPermission,
@@ -13,6 +14,10 @@ export function useSettings() {
 
   const setAccent = useCallback((accent: string) => setSettings((s) => ({ ...s, accent })), [setSettings]);
   const toggleWeather = useCallback(() => setSettings((s) => ({ ...s, showWeather: !s.showWeather })), [setSettings]);
+  const setNotesFontSize = useCallback(
+    (notesFontSize: NotesFontSize) => setSettings((s) => ({ ...s, notesFontSize })),
+    [setSettings]
+  );
 
   const toggleNotifications = useCallback(async () => {
     const next = !settings.notifEnabled;
@@ -43,5 +48,5 @@ export function useSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.notifEnabled, routine]);
 
-  return { settings, setAccent, toggleWeather, toggleNotifications };
+  return { settings, setAccent, toggleWeather, toggleNotifications, setNotesFontSize };
 }

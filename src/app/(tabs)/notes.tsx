@@ -5,6 +5,7 @@ import { EditableNotesList } from '@/components/EditableNotesList';
 import { AphorismsView } from '@/components/notes/AphorismsView';
 import { SubTabs } from '@/components/SubTabs';
 import { useNotes, usePhilosophy } from '@/store/useNotes';
+import { useSettings } from '@/store/useSettings';
 import { useTheme } from '@/theme/ThemeContext';
 import { tabBarHeight } from '@/theme/tokens';
 
@@ -15,6 +16,8 @@ export default function NotesScreen() {
   const [subtab, setSubtab] = useState<SubTab>('notes');
   const notes = useNotes();
   const philosophy = usePhilosophy();
+  const { settings } = useSettings();
+  const notesFontSize = settings.notesFontSize ?? 'medium';
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -30,33 +33,37 @@ export default function NotesScreen() {
         active={subtab}
         onChange={setSubtab}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }} keyboardShouldPersistTaps="handled">
-        {subtab === 'notes' && (
-          <EditableNotesList
-            list={notes.list}
-            startNew={notes.startNew}
-            save={notes.save}
-            remove={notes.remove}
-            move={notes.move}
-            emptyText="No notes yet. Jot down thoughts, progress, anything on your mind."
-            newLabel="+ New note"
-            placeholder="Write a note..."
-          />
-        )}
-        {subtab === 'philosophy' && (
-          <EditableNotesList
-            list={philosophy.list}
-            startNew={philosophy.startNew}
-            save={philosophy.save}
-            remove={philosophy.remove}
-            move={philosophy.move}
-            emptyText="No entries yet."
-            newLabel="+ New entry"
-            placeholder="Write an axiom or principle..."
-          />
-        )}
-        {subtab === 'aphorisms' && <AphorismsView />}
-      </ScrollView>
+      {subtab === 'notes' && (
+        <EditableNotesList
+          list={notes.list}
+          startNew={notes.startNew}
+          save={notes.save}
+          remove={notes.remove}
+          reorder={notes.reorder}
+          emptyText="No notes yet. Jot down thoughts, progress, anything on your mind."
+          newLabel="+ New note"
+          placeholder="Write a note..."
+          fontSize={notesFontSize}
+        />
+      )}
+      {subtab === 'philosophy' && (
+        <EditableNotesList
+          list={philosophy.list}
+          startNew={philosophy.startNew}
+          save={philosophy.save}
+          remove={philosophy.remove}
+          reorder={philosophy.reorder}
+          emptyText="No entries yet."
+          newLabel="+ New entry"
+          placeholder="Write an axiom or principle..."
+          fontSize={notesFontSize}
+        />
+      )}
+      {subtab === 'aphorisms' && (
+        <ScrollView contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }} keyboardShouldPersistTaps="handled">
+          <AphorismsView />
+        </ScrollView>
+      )}
     </View>
   );
 }

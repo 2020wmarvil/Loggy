@@ -3,14 +3,22 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { LiftingEditor } from '@/components/LiftingEditor';
 import { ScheduleEditor } from '@/components/ScheduleEditor';
+import { NotesFontSize } from '@/data/types';
 import { ACCENTS, AccentKey } from '@/theme/colors';
 import { useSettings } from '@/store/useSettings';
 import { useTheme } from '@/theme/ThemeContext';
 import { radii, tabBarHeight } from '@/theme/tokens';
 
+const FONT_SIZE_OPTIONS: { key: NotesFontSize; label: string }[] = [
+  { key: 'small', label: 'Small' },
+  { key: 'medium', label: 'Medium' },
+  { key: 'large', label: 'Large' },
+];
+
 export default function SettingsScreen() {
   const theme = useTheme();
-  const { settings, setAccent, toggleWeather, toggleNotifications } = useSettings();
+  const { settings, setAccent, toggleWeather, toggleNotifications, setNotesFontSize } = useSettings();
+  const notesFontSize = settings.notesFontSize ?? 'medium';
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -32,6 +40,26 @@ export default function SettingsScreen() {
               <Text style={[styles.prefDesc, { color: theme.muted }]}>Show today&apos;s forecast on the Today tab</Text>
             </View>
             <Toggle on={settings.showWeather} onPress={toggleWeather} theme={{ green: theme.green, border2: theme.border2 }} />
+          </View>
+          <View style={[styles.prefRow, { borderBottomColor: theme.border }]}>
+            <View style={styles.prefText}>
+              <Text style={[styles.prefLabel, { color: theme.text }]}>Notes text size</Text>
+              <Text style={[styles.prefDesc, { color: theme.muted }]}>Applies to your notes</Text>
+            </View>
+            <View style={[styles.sizeGroup, { borderColor: theme.border2 }]}>
+              {FONT_SIZE_OPTIONS.map((opt) => {
+                const active = notesFontSize === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setNotesFontSize(opt.key)}
+                    style={[styles.sizeOption, active && { backgroundColor: theme.greenMid }]}
+                  >
+                    <Text style={[styles.sizeOptionText, { color: active ? theme.green : theme.muted }]}>{opt.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
           <View style={styles.accentRow}>
             {(Object.entries(ACCENTS) as [AccentKey, (typeof ACCENTS)[AccentKey]][]).map(([key, a]) => (
@@ -69,6 +97,9 @@ const styles = StyleSheet.create({
   head: { paddingHorizontal: 20, paddingTop: 22 },
   title: { fontSize: 27, fontWeight: '700', letterSpacing: -0.945 },
   prefCard: { borderRadius: radii.card, borderWidth: 1, marginBottom: 22, overflow: 'hidden' },
+  sizeGroup: { flexDirection: 'row', borderRadius: 8, borderWidth: 1, overflow: 'hidden' },
+  sizeOption: { paddingVertical: 6, paddingHorizontal: 10 },
+  sizeOptionText: { fontSize: 11.5, fontWeight: '600' },
   prefRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 13, paddingHorizontal: 14, borderBottomWidth: 1 },
   prefText: { flex: 1 },
   prefLabel: { fontSize: 13, fontWeight: '500' },

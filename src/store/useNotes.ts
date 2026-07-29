@@ -27,20 +27,14 @@ function useNoteList(list: NoteEntry[], setList: Updater<NoteEntry[]>) {
     [setList]
   );
 
-  const move = useCallback(
-    (idx: number, dir: 1 | -1) => {
-      setList((l) => {
-        const j = idx + dir;
-        if (j < 0 || j >= l.length) return l;
-        const next = l.slice();
-        [next[idx], next[j]] = [next[j], next[idx]];
-        return next;
-      });
+  const reorder = useCallback(
+    (next: NoteEntry[]) => {
+      setList(next);
     },
     [setList]
   );
 
-  return { list, startNew, save, remove, move };
+  return { list, startNew, save, remove, reorder };
 }
 
 export function useNotes() {

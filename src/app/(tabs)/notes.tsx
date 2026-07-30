@@ -37,12 +37,11 @@ export default function NotesScreen() {
         <EditableNotesList
           list={notes.list}
           startNew={notes.startNew}
-          save={notes.save}
           remove={notes.remove}
           reorder={notes.reorder}
           emptyText="No notes yet. Jot down thoughts, progress, anything on your mind."
           newLabel="+ New note"
-          placeholder="Write a note..."
+          listKey="notes"
           fontSize={notesFontSize}
         />
       )}
@@ -50,12 +49,11 @@ export default function NotesScreen() {
         <EditableNotesList
           list={philosophy.list}
           startNew={philosophy.startNew}
-          save={philosophy.save}
           remove={philosophy.remove}
           reorder={philosophy.reorder}
           emptyText="No entries yet."
           newLabel="+ New entry"
-          placeholder="Write an axiom or principle..."
+          listKey="philosophy"
           fontSize={notesFontSize}
         />
       )}

@@ -182,12 +182,14 @@ function ExerciseBlock({
         <View>
           <Text style={[styles.exName, { color: theme.text }]}>{ex.name}</Text>
           <Text style={[styles.exMeta, { color: theme.muted }]}>
-            {ex.sets} sets · {ex.repMin}–{ex.repMax} {ex.type === 'time' ? ex.unit || 's' : 'reps'}
+            {ex.type === 'time' ? `${ex.sets} sets · ${ex.repMax}${ex.unit || 's'}` : `${ex.sets} sets · ${ex.repMin}–${ex.repMax} reps`}
           </Text>
         </View>
         {g.progressed && (
           <View style={[styles.progTag, { backgroundColor: theme.greenDim }]}>
-            <Text style={[styles.progTagText, { color: accent }]}>↑ +{ex.increment} lbs</Text>
+            <Text style={[styles.progTagText, { color: accent }]}>
+              {ex.type === 'weighted' ? `↑ +${ex.increment} lbs` : '↑ Improved'}
+            </Text>
           </View>
         )}
         {g.isNew && (
@@ -207,8 +209,7 @@ function ExerciseBlock({
           <Text style={[styles.goalStripArrow, { color: theme.muted2 }]}>→</Text>
           <Text style={[styles.goalStripLabel, { color: theme.muted }]}>Goal</Text>
           <Text style={[styles.goalStripVal, { color: g.progressed ? accent : theme.text }]}>
-            {ex.type === 'weighted' ? `${g.weight} lbs · ` : ''}
-            {ex.repMin}–{ex.repMax}
+            {ex.type === 'weighted' ? `${g.weight} lbs · ${ex.repMin}–${ex.repMax}` : `${ex.repMax}${ex.unit || 's'}`}
           </Text>
         </View>
       )}

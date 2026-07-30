@@ -45,6 +45,7 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="logger/[programId]/[sessionId]" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="note-editor/[listKey]/[id]" options={{ animation: 'slide_from_bottom' }} />
               </Stack>
             </View>
           </ThemeProvider>

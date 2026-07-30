@@ -104,7 +104,9 @@ export function LiftingEditor() {
               <View>
                 <Text style={[styles.viewName, { color: theme.text }]}>{ex.name}</Text>
                 <Text style={[styles.viewDetail, { color: theme.muted }]}>
-                  {ex.sets} sets · {ex.repMin}–{ex.repMax} {ex.type === 'time' ? ex.unit || 's' : 'reps'}
+                  {ex.type === 'time'
+                    ? `${ex.sets} sets · ${ex.repMax}${ex.unit || 's'}`
+                    : `${ex.sets} sets · ${ex.repMin}–${ex.repMax} reps`}
                 </Text>
               </View>
               {ex.type === 'weighted' && (
@@ -147,30 +149,40 @@ function ExerciseEditRow({
       </View>
       <View style={styles.exNums}>
         <NumField label="Sets" value={ex.sets} onChange={(v) => onChange('sets', v)} theme={theme} />
-        <NumField label={ex.type === 'time' ? 'Min s' : 'Min'} value={ex.repMin} onChange={(v) => onChange('repMin', v)} theme={theme} />
-        <NumField label={ex.type === 'time' ? 'Max s' : 'Max'} value={ex.repMax} onChange={(v) => onChange('repMax', v)} theme={theme} />
-        {ex.type === 'weighted' && (
+        {ex.type === 'time' ? (
+          <NumField
+            label="Seconds"
+            value={ex.repMax}
+            onChange={(v) => {
+              onChange('repMin', v);
+              onChange('repMax', v);
+            }}
+            theme={theme}
+          />
+        ) : (
           <>
+            <NumField label="Min" value={ex.repMin} onChange={(v) => onChange('repMin', v)} theme={theme} />
+            <NumField label="Max" value={ex.repMax} onChange={(v) => onChange('repMax', v)} theme={theme} />
             <NumField label="Incr" value={ex.increment} onChange={(v) => onChange('increment', v)} theme={theme} />
             <NumField label="Start" value={ex.startWeight} onChange={(v) => onChange('startWeight', v)} theme={theme} />
           </>
         )}
-        <View style={styles.typeField}>
-          <Text style={[styles.fieldLabel, { color: theme.muted2 }]}>Type</Text>
-          <View style={styles.typeChips}>
-            {EX_TYPES.map((t) => {
-              const on = ex.type === t;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => onChange('type', t)}
-                  style={[styles.typeChip, { backgroundColor: on ? theme.greenDim : theme.s2, borderColor: on ? theme.greenMid : theme.border2 }]}
-                >
-                  <Text style={[styles.typeChipText, { color: on ? theme.green : theme.muted }]}>{TYPE_LABEL[t]}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+      </View>
+      <View style={styles.typeField}>
+        <Text style={[styles.fieldLabel, { color: theme.muted2 }]}>Type</Text>
+        <View style={styles.typeChips}>
+          {EX_TYPES.map((t) => {
+            const on = ex.type === t;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => onChange('type', t)}
+                style={[styles.typeChip, { backgroundColor: on ? theme.greenDim : theme.s2, borderColor: on ? theme.greenMid : theme.border2 }]}
+              >
+                <Text style={[styles.typeChipText, { color: on ? theme.green : theme.muted }]}>{TYPE_LABEL[t]}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
     </View>

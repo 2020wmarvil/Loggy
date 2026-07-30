@@ -1,9 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
   LayoutChangeEvent,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -11,9 +9,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -23,7 +21,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { NoteEntry, NotesFontSize } from '@/data/types';
@@ -44,12 +41,11 @@ type DragInfo = { id: string; y: number; height: number };
 interface EditableNotesListProps {
   list: NoteEntry[];
   startNew: () => string;
-  save: (id: string, title: string, text: string) => void;
   remove: (id: string) => void;
   reorder: (next: NoteEntry[]) => void;
   emptyText: string;
   newLabel: string;
-  placeholder: string;
+  listKey: 'notes' | 'philosophy';
   fontSize: NotesFontSize;
 }
 
@@ -67,6 +63,7 @@ function confirmDelete(onConfirm: () => void) {
 interface NoteRowProps {
   note: NoteEntry;
   dragInfo: DragInfo | null;
+  revealed: boolean;
   myLayout: Layout | undefined;
   theme: ReturnType<typeof useTheme>;
   sizes: (typeof noteFontSizes)[NotesFontSize];
@@ -74,6 +71,7 @@ interface NoteRowProps {
   scrollDelta: SharedValue<number>;
   onLayout: (id: string, y: number, height: number) => void;
   onBeginEdit: (n: NoteEntry) => void;
+  onDismissReveal: () => void;
   onDelete: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragUpdate: (absoluteY: number) => void;
@@ -83,6 +81,7 @@ interface NoteRowProps {
 function NoteRow({
   note,
   dragInfo,
+  revealed,
   myLayout,
   theme,
   sizes,
@@ -90,6 +89,7 @@ function NoteRow({
   scrollDelta,
   onLayout,
   onBeginEdit,
+  onDismissReveal,
   onDelete,
   onDragStart,
   onDragUpdate,
@@ -101,8 +101,12 @@ function NoteRow({
     onLayout(note.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height);
   };
 
+  // A follow-up tap while Delete is revealed just dismisses it (matches the
+  // usual "tap elsewhere to cancel" pattern) instead of opening the note.
   const tap = Gesture.Tap().onEnd((_e, success) => {
-    if (success) runOnJS(onBeginEdit)(note);
+    if (!success) return;
+    if (revealed) runOnJS(onDismissReveal)();
+    else runOnJS(onBeginEdit)(note);
   });
 
   const pan = Gesture.Pan()
@@ -131,9 +135,11 @@ function NoteRow({
     const myCenter = myLayout.y + myLayout.height / 2;
     let target = 0;
     if (myLayout.y > dragInfo.y) {
-      target = draggedCenter < myCenter ? -gap : 0;
+      // I start out below the dragged item — shift up once it's been dragged past me.
+      target = draggedCenter > myCenter ? -gap : 0;
     } else if (myLayout.y < dragInfo.y) {
-      target = draggedCenter > myCenter ? gap : 0;
+      // I start out above the dragged item — shift down once it's been dragged past me.
+      target = draggedCenter < myCenter ? gap : 0;
     }
     return withSpring(target, SHIFT_SPRING);
   }, [dragInfo, isActive, myLayout]);
@@ -147,7 +153,7 @@ function NoteRow({
       onLayout={handleLayout}
       style={[
         styles.card,
-        { backgroundColor: theme.s1, borderColor: isActive ? theme.green : theme.border },
+        { backgroundColor: theme.s1, borderColor: isActive || revealed ? theme.green : theme.border },
         isActive && styles.cardActive,
         animatedStyle,
       ]}
@@ -164,9 +170,11 @@ function NoteRow({
       </GestureDetector>
       <View style={styles.meta}>
         <Text style={[styles.metaDate, { color: theme.muted }]}>{fmtShort(note.updatedAt)}</Text>
-        <Pressable onPress={() => onDelete(note.id)} hitSlop={6}>
-          <Text style={[styles.actionText, { color: theme.red }]}>Delete</Text>
-        </Pressable>
+        {revealed && (
+          <Pressable onPress={() => onDelete(note.id)} hitSlop={6}>
+            <Text style={[styles.actionText, { color: theme.red }]}>Delete</Text>
+          </Pressable>
+        )}
       </View>
     </Animated.View>
   );
@@ -175,22 +183,18 @@ function NoteRow({
 export function EditableNotesList({
   list,
   startNew,
-  save,
   remove,
   reorder,
   emptyText,
   newLabel,
-  placeholder,
+  listKey,
   fontSize,
 }: EditableNotesListProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const sizes = noteFontSizes[fontSize];
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftText, setDraftText] = useState('');
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
-  const draftRef = useRef({ title: '', text: '' });
+  const [revealedId, setRevealedId] = useState<string | null>(null);
   const layoutsRef = useRef<Record<string, Layout>>({});
   const rawTranslateY = useSharedValue(0);
   const scrollDelta = useSharedValue(0);
@@ -210,46 +214,16 @@ export function EditableNotesList({
     };
   }, []);
 
-  // Every change is written straight to storage (not just debounced) so a
-  // note survives even if the app is backgrounded or killed mid-edit.
-  const persist = (id: string, title: string, text: string) => {
-    save(id, title.trim(), text.trim());
-  };
-
   const beginNew = () => {
     const id = startNew();
-    draftRef.current = { title: '', text: '' };
-    setEditingId(id);
-    setDraftTitle('');
-    setDraftText('');
+    router.push(`/note-editor/${listKey}/${id}`);
   };
+
+  const dismissReveal = () => setRevealedId(null);
 
   const beginEdit = (n: NoteEntry) => {
-    draftRef.current = { title: n.title || '', text: n.text };
-    setEditingId(n.id);
-    setDraftTitle(n.title || '');
-    setDraftText(n.text);
-  };
-
-  const closeEditor = () => {
-    if (editingId) {
-      const title = draftRef.current.title.trim();
-      const text = draftRef.current.text.trim();
-      if (!title && !text) remove(editingId);
-    }
-    setEditingId(null);
-  };
-
-  const onChangeTitle = (v: string) => {
-    setDraftTitle(v);
-    draftRef.current.title = v;
-    if (editingId) persist(editingId, v, draftRef.current.text);
-  };
-
-  const onChangeText = (v: string) => {
-    setDraftText(v);
-    draftRef.current.text = v;
-    if (editingId) persist(editingId, draftRef.current.title, v);
+    setRevealedId(null);
+    router.push(`/note-editor/${listKey}/${n.id}`);
   };
 
   const registerLayout = (id: string, y: number, height: number) => {
@@ -287,6 +261,7 @@ export function EditableNotesList({
   const handleDragStart = (id: string) => {
     const layout = layoutsRef.current[id];
     setDragInfo(layout ? { id, y: layout.y, height: layout.height } : null);
+    setRevealedId(id);
     scrollDelta.value = 0;
     scrollOffsetAtDragStartRef.current = scrollOffsetRef.current;
     // ScrollView forwards `measure` from its underlying native view at runtime,
@@ -339,16 +314,8 @@ export function EditableNotesList({
     reorder(next);
   };
 
-  const editingNote = list.find((n) => n.id === editingId) || null;
-
   return (
     <View style={styles.root}>
-      <View style={styles.toolbar}>
-        <Pressable onPress={beginNew} style={[styles.newBtn, { backgroundColor: theme.greenMid }]}>
-          <Text style={[styles.newBtnText, { color: theme.green }]}>{newLabel}</Text>
-        </Pressable>
-      </View>
-
       {list.length === 0 ? (
         <Text style={[styles.empty, { color: theme.muted }]}>{emptyText}</Text>
       ) : (
@@ -371,6 +338,7 @@ export function EditableNotesList({
               key={n.id}
               note={n}
               dragInfo={dragInfo}
+              revealed={revealedId === n.id}
               myLayout={layoutsRef.current[n.id]}
               theme={theme}
               sizes={sizes}
@@ -378,7 +346,11 @@ export function EditableNotesList({
               scrollDelta={scrollDelta}
               onLayout={registerLayout}
               onBeginEdit={beginEdit}
-              onDelete={(id) => confirmDelete(() => remove(id))}
+              onDismissReveal={dismissReveal}
+              onDelete={(id) => confirmDelete(() => {
+                setRevealedId(null);
+                remove(id);
+              })}
               onDragStart={handleDragStart}
               onDragUpdate={handleDragUpdate}
               onDragEnd={handleDragEnd}
@@ -387,54 +359,37 @@ export function EditableNotesList({
         </ScrollView>
       )}
 
-      <Modal
-        visible={editingNote !== null}
-        animationType={Platform.OS === 'web' ? 'none' : 'slide'}
-        presentationStyle="fullScreen"
-        onRequestClose={closeEditor}
+      <Pressable
+        onPress={beginNew}
+        accessibilityLabel={newLabel}
+        style={[styles.fab, { backgroundColor: theme.green }]}
       >
-        <KeyboardAvoidingView
-          style={[styles.modalRoot, { backgroundColor: theme.bg, paddingTop: insets.top }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={[styles.modalHeader, { borderBottomColor: theme.border }]}>
-            <Pressable onPress={closeEditor} style={[styles.closeBtn, { backgroundColor: theme.s2 }]} hitSlop={8}>
-              <Icon name="back" size={16} color={theme.text} strokeWidth={2} />
-            </Pressable>
-          </View>
-          <TextInput
-            value={draftTitle}
-            onChangeText={onChangeTitle}
-            placeholder="Title"
-            placeholderTextColor={theme.muted2}
-            autoFocus
-            style={[styles.titleInputFull, { color: theme.text, fontSize: sizes.editorTitle }]}
-          />
-          <TextInput
-            value={draftText}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={theme.muted2}
-            multiline
-            style={[
-              styles.textAreaFull,
-              { color: theme.text, fontSize: sizes.editorBody, lineHeight: sizes.editorBody * 1.53 },
-            ]}
-          />
-        </KeyboardAvoidingView>
-      </Modal>
+        <Icon name="plus" size={24} color="#000" strokeWidth={2.4} />
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  toolbar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4, alignItems: 'flex-end' },
-  newBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
-  newBtnText: { fontSize: 12.5, fontWeight: '600' },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
   empty: { padding: 50, textAlign: 'center', fontSize: 13.5 },
   scroll: { flex: 1 },
-  list: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: tabBarHeight + 16, gap: LIST_GAP },
+  list: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: tabBarHeight + 16, gap: LIST_GAP },
   card: { borderRadius: radii.card, borderWidth: 1, padding: 14 },
   cardActive: { elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, zIndex: 10 },
   cardTitle: { fontWeight: '700', letterSpacing: -0.17, marginBottom: 6 },
@@ -442,9 +397,4 @@ const styles = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 9 },
   metaDate: { fontSize: 11 },
   actionText: { fontSize: 11, fontWeight: '500' },
-  modalRoot: { flex: 1 },
-  modalHeader: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
-  closeBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  titleInputFull: { fontWeight: '700', letterSpacing: -0.2, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
-  textAreaFull: { flex: 1, paddingHorizontal: 20, paddingTop: 4, textAlignVertical: 'top' },
 });

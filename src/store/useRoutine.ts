@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import { useAppData } from '@/store/AppDataContext';
-import { getRoutineForDay } from '@/lib/routine';
+import { getRoutineForDay, timeToMinutes } from '@/lib/routine';
 import { RoutineItem, RoutineTagKey } from '@/data/types';
 
 type DraftItem = { time: string; activity: string; tag: RoutineTagKey };
@@ -43,5 +43,14 @@ export function useRoutine() {
     [routine, saveDay]
   );
 
-  return { routine, getDay, saveDay, updateItem, deleteItem, addItem };
+  const sortDay = useCallback(
+    (dow: number) => {
+      const items = getRoutineForDay(routine, dow).map(({ id, ...rest }) => rest);
+      const sorted = [...items].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+      saveDay(dow, sorted);
+    },
+    [routine, saveDay]
+  );
+
+  return { routine, getDay, saveDay, updateItem, deleteItem, addItem, sortDay };
 }

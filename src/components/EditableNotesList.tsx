@@ -1,9 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   LayoutChangeEvent,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -13,30 +11,16 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  SharedValue,
-  useAnimatedStyle,
-  useDerivedValue,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { runOnJS, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
 import { NoteEntry, NotesFontSize } from '@/data/types';
 import { fmtShort } from '@/lib/date';
+import { createDragGesture, DragInfo, Layout, useDraggableList, useDragRowShift } from '@/hooks/useDraggableList';
 import { useTheme } from '@/theme/ThemeContext';
 import { noteFontSizes, radii, tabBarHeight } from '@/theme/tokens';
 
-const LONG_PRESS_MS = 350;
-const AUTO_SCROLL_EDGE_ZONE = 60;
-const AUTO_SCROLL_STEP = 14;
-const AUTO_SCROLL_INTERVAL_MS = 16;
 const LIST_GAP = 8;
-const SHIFT_SPRING = { damping: 22, stiffness: 260, mass: 0.6 };
-
-type Layout = { y: number; height: number };
-type DragInfo = { id: string; y: number; height: number };
 
 interface EditableNotesListProps {
   list: NoteEntry[];
@@ -109,40 +93,16 @@ function NoteRow({
     else runOnJS(onBeginEdit)(note);
   });
 
-  const pan = Gesture.Pan()
-    .activateAfterLongPress(LONG_PRESS_MS)
-    .onStart(() => {
-      rawTranslateY.value = 0;
-      runOnJS(onDragStart)(note.id);
-    })
-    .onUpdate((e) => {
-      rawTranslateY.value = e.translationY;
-      runOnJS(onDragUpdate)(e.absoluteY);
-    })
-    .onEnd((e) => {
-      runOnJS(onDragEnd)(note.id, e.translationY);
-      rawTranslateY.value = withSpring(0);
-    });
+  const pan = createDragGesture({
+    rawTranslateY,
+    onDragStart: () => onDragStart(note.id),
+    onDragUpdate,
+    onDragEnd: (translationY) => onDragEnd(note.id, translationY),
+  });
 
   const gesture = Gesture.Exclusive(pan, tap);
 
-  // While another row is being dragged, spring this row out of the way once
-  // the dragged card's center has crossed past it — makes room to "land" in.
-  const shiftY = useDerivedValue(() => {
-    if (!dragInfo || isActive || !myLayout) return withSpring(0, SHIFT_SPRING);
-    const gap = dragInfo.height + LIST_GAP;
-    const draggedCenter = dragInfo.y + rawTranslateY.value + scrollDelta.value + dragInfo.height / 2;
-    const myCenter = myLayout.y + myLayout.height / 2;
-    let target = 0;
-    if (myLayout.y > dragInfo.y) {
-      // I start out below the dragged item — shift up once it's been dragged past me.
-      target = draggedCenter > myCenter ? -gap : 0;
-    } else if (myLayout.y < dragInfo.y) {
-      // I start out above the dragged item — shift down once it's been dragged past me.
-      target = draggedCenter < myCenter ? gap : 0;
-    }
-    return withSpring(target, SHIFT_SPRING);
-  }, [dragInfo, isActive, myLayout]);
+  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, LIST_GAP);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: isActive ? rawTranslateY.value + scrollDelta.value : shiftY.value }],
@@ -193,26 +153,25 @@ export function EditableNotesList({
   const theme = useTheme();
   const router = useRouter();
   const sizes = noteFontSizes[fontSize];
-  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
   const [revealedId, setRevealedId] = useState<string | null>(null);
-  const layoutsRef = useRef<Record<string, Layout>>({});
-  const rawTranslateY = useSharedValue(0);
-  const scrollDelta = useSharedValue(0);
-
   const scrollRef = useRef<ScrollView>(null);
-  const scrollOffsetRef = useRef(0);
-  const scrollOffsetAtDragStartRef = useRef(0);
-  const containerBoundsRef = useRef<{ top: number; bottom: number } | null>(null);
-  const containerHeightRef = useRef(0);
-  const contentHeightRef = useRef(0);
-  const autoScrollDirectionRef = useRef<1 | -1 | 0>(0);
-  const autoScrollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (autoScrollTimerRef.current) clearInterval(autoScrollTimerRef.current);
-    };
-  }, []);
+  const {
+    dragInfo,
+    layoutsRef,
+    rawTranslateY,
+    scrollDelta,
+    registerLayout,
+    handleDragStart: baseHandleDragStart,
+    handleDragUpdate,
+    handleDragEnd,
+    scrollHandlers,
+  } = useDraggableList<NoteEntry>({
+    items: list,
+    keyExtractor: (n) => n.id,
+    onReorder: reorder,
+    scrollRef,
+  });
 
   const beginNew = () => {
     const id = startNew();
@@ -226,92 +185,9 @@ export function EditableNotesList({
     router.push(`/note-editor/${listKey}/${n.id}`);
   };
 
-  const registerLayout = (id: string, y: number, height: number) => {
-    layoutsRef.current[id] = { y, height };
-  };
-
-  const stopAutoScroll = () => {
-    autoScrollDirectionRef.current = 0;
-    if (autoScrollTimerRef.current) {
-      clearInterval(autoScrollTimerRef.current);
-      autoScrollTimerRef.current = null;
-    }
-  };
-
-  const startAutoScroll = (direction: 1 | -1) => {
-    if (autoScrollDirectionRef.current === direction) return;
-    autoScrollDirectionRef.current = direction;
-    if (autoScrollTimerRef.current) return;
-    autoScrollTimerRef.current = setInterval(() => {
-      const dir = autoScrollDirectionRef.current;
-      if (!dir) return;
-      const maxOffset = Math.max(0, contentHeightRef.current - containerHeightRef.current);
-      const next = Math.max(0, Math.min(maxOffset, scrollOffsetRef.current + dir * AUTO_SCROLL_STEP));
-      if (next === scrollOffsetRef.current) return;
-      scrollOffsetRef.current = next;
-      scrollRef.current?.scrollTo({ y: next, animated: false });
-      scrollDelta.value = next - scrollOffsetAtDragStartRef.current;
-    }, AUTO_SCROLL_INTERVAL_MS);
-  };
-
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
-  };
-
   const handleDragStart = (id: string) => {
-    const layout = layoutsRef.current[id];
-    setDragInfo(layout ? { id, y: layout.y, height: layout.height } : null);
+    baseHandleDragStart(id);
     setRevealedId(id);
-    scrollDelta.value = 0;
-    scrollOffsetAtDragStartRef.current = scrollOffsetRef.current;
-    // ScrollView forwards `measure` from its underlying native view at runtime,
-    // but the type definitions don't expose it on the ScrollView class.
-    type MeasureFn = (cb: (x: number, y: number, w: number, h: number, pageX: number, pageY: number) => void) => void;
-    (scrollRef.current as unknown as { measure?: MeasureFn })?.measure?.((_x, _y, _w, h, _pageX, pageY) => {
-      containerBoundsRef.current = { top: pageY, bottom: pageY + h };
-    });
-  };
-
-  const handleDragUpdate = (absoluteY: number) => {
-    const bounds = containerBoundsRef.current;
-    if (!bounds) return;
-    if (absoluteY < bounds.top + AUTO_SCROLL_EDGE_ZONE) {
-      startAutoScroll(-1);
-    } else if (absoluteY > bounds.bottom - AUTO_SCROLL_EDGE_ZONE) {
-      startAutoScroll(1);
-    } else {
-      stopAutoScroll();
-    }
-  };
-
-  const handleDragEnd = (id: string, translationY: number) => {
-    stopAutoScroll();
-    setDragInfo(null);
-    const dragged = layoutsRef.current[id];
-    const fromIndex = list.findIndex((n) => n.id === id);
-    if (!dragged || fromIndex === -1) {
-      scrollDelta.value = 0;
-      return;
-    }
-    const netTranslation = translationY + scrollDelta.value;
-    const draggedCenter = dragged.y + netTranslation + dragged.height / 2;
-
-    // Find where the dragged item's current center falls among the OTHER
-    // items (dragged item excluded), then insert it there.
-    const others = list.filter((n) => n.id !== id);
-    let targetIndex = others.length;
-    for (let i = 0; i < others.length; i++) {
-      const l = layoutsRef.current[others[i].id];
-      if (!l) continue;
-      if (draggedCenter < l.y + l.height / 2) {
-        targetIndex = i;
-        break;
-      }
-    }
-    scrollDelta.value = 0;
-    const next = others.slice();
-    next.splice(targetIndex, 0, list[fromIndex]);
-    reorder(next);
   };
 
   return (
@@ -325,13 +201,7 @@ export function EditableNotesList({
           style={styles.scroll}
           keyboardShouldPersistTaps="handled"
           scrollEventThrottle={16}
-          onScroll={handleScroll}
-          onLayout={(e) => {
-            containerHeightRef.current = e.nativeEvent.layout.height;
-          }}
-          onContentSizeChange={(_w, h) => {
-            contentHeightRef.current = h;
-          }}
+          {...scrollHandlers}
         >
           {list.map((n) => (
             <NoteRow

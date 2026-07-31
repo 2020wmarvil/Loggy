@@ -4,7 +4,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 export type IconName =
   | 'today' | 'history' | 'note' | 'gear' | 'back' | 'check'
   | 'chev' | 'left' | 'right' | 'pencil' | 'x' | 'plus'
-  | 'sun' | 'cloud' | 'rain';
+  | 'sun' | 'cloud' | 'rain' | 'grip';
 
 interface IconProps {
   name: IconName;
@@ -87,6 +87,17 @@ function renderPaths(name: IconName): React.ReactNode {
         <>
           <Path d="M17.5 15a4.5 4.5 0 0 0 0-9 5.5 5.5 0 0 0-10.6-1.6A4 4 0 0 0 6 15h11.5z" />
           <Path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2" />
+        </>
+      );
+    case 'grip':
+      return (
+        <>
+          <Circle cx="9" cy="6" r="0.6" />
+          <Circle cx="9" cy="12" r="0.6" />
+          <Circle cx="9" cy="18" r="0.6" />
+          <Circle cx="15" cy="6" r="0.6" />
+          <Circle cx="15" cy="12" r="0.6" />
+          <Circle cx="15" cy="18" r="0.6" />
         </>
       );
     default:

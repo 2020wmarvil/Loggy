@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
 import { Logs } from '@/data/types';
-import { fmtShort } from '@/lib/date';
+import { fmtShort, formatDuration } from '@/lib/date';
 import { groupByWeek } from '@/lib/progression';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
 import { getSession } from '@/lib/progression';
@@ -36,8 +36,11 @@ export function LogView({ logs }: { logs: Logs }) {
                   <View style={styles.entryLeft}>
                     <View style={[styles.dot, { backgroundColor: theme.green }]} />
                     <View>
-                      <Text style={[styles.name, { color: theme.text }]}>{program.name} · {sess?.name}</Text>
-                      <Text style={[styles.date, { color: theme.muted }]}>{fmtShort(e.date)}</Text>
+                      <Text style={[styles.name, { color: theme.text }]}>{sess?.name}</Text>
+                      <Text style={[styles.date, { color: theme.muted }]}>
+                        {fmtShort(e.date)}
+                        {e.durationSeconds != null ? ` · ${formatDuration(e.durationSeconds)}` : ''}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.entryRight}>

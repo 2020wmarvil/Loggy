@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
+import { createDragGesture, DragInfo, Layout, useDraggableList, useDragRowShift } from '@/hooks/useDraggableList';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
 import { Exercise, ExerciseType } from '@/data/types';
 import { useTheme } from '@/theme/ThemeContext';
@@ -16,16 +19,24 @@ const TYPE_LABEL: Record<ExerciseType, string> = { weighted: 'Weighted', time: '
 
 export function LiftingEditor() {
   const theme = useTheme();
-  const { program, addSession, removeSession, addExercise, updateExercise, deleteExercise } = useLiftingProgram();
+  const { program, addSession, removeSession, addExercise, updateExercise, deleteExercise, reorderExercises } =
+    useLiftingProgram();
   const todayDow = new Date().getDay();
   const [selDow, setSelDow] = useState(todayDow);
   const [editing, setEditing] = useState(false);
   const sess = program.sessions.find((s) => s.dayOfWeek === selDow);
 
+  const { dragInfo, layoutsRef, rawTranslateY, scrollDelta, registerLayout, handleDragStart, handleDragUpdate, handleDragEnd } =
+    useDraggableList<Exercise>({
+      items: sess?.exercises ?? [],
+      keyExtractor: (ex) => ex.id,
+      onReorder: (next) => reorderExercises(selDow, next),
+    });
+
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: theme.text }]}>Lifting</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Program</Text>
         <Pressable
           onPress={() => setEditing((e) => !e)}
           style={[
@@ -65,7 +76,7 @@ export function LiftingEditor() {
         {!sess ? (
           <View style={styles.emptyWrap}>
             <Text style={[styles.emptyText, { color: theme.muted, marginBottom: editing ? 10 : 0 }]}>
-              No lifting session on {DFULL[selDow]}.
+              No program session on {DFULL[selDow]}.
             </Text>
             {editing && (
               <Pressable
@@ -84,6 +95,14 @@ export function LiftingEditor() {
                 ex={ex}
                 theme={theme}
                 isLast={exIdx === sess.exercises.length - 1}
+                dragInfo={dragInfo}
+                myLayout={layoutsRef.current[ex.id]}
+                rawTranslateY={rawTranslateY}
+                scrollDelta={scrollDelta}
+                onLayout={registerLayout}
+                onDragStart={handleDragStart}
+                onDragUpdate={handleDragUpdate}
+                onDragEnd={handleDragEnd}
                 onChange={(field, val) => updateExercise(selDow, exIdx, field, val)}
                 onDelete={() => deleteExercise(selDow, exIdx)}
               />
@@ -124,18 +143,70 @@ function ExerciseEditRow({
   ex,
   theme,
   isLast,
+  dragInfo,
+  myLayout,
+  rawTranslateY,
+  scrollDelta,
+  onLayout,
+  onDragStart,
+  onDragUpdate,
+  onDragEnd,
   onChange,
   onDelete,
 }: {
   ex: Exercise;
   theme: Theme;
   isLast: boolean;
+  dragInfo: DragInfo | null;
+  myLayout: Layout | undefined;
+  rawTranslateY: SharedValue<number>;
+  scrollDelta: SharedValue<number>;
+  onLayout: (id: string, y: number, height: number) => void;
+  onDragStart: (id: string) => void;
+  onDragUpdate: (absoluteY: number) => void;
+  onDragEnd: (id: string, translationY: number) => void;
   onChange: (field: keyof Exercise, val: Exercise[keyof Exercise]) => void;
   onDelete: () => void;
 }) {
+  const isActive = dragInfo?.id === ex.id;
+
+  const handleLayout = (e: LayoutChangeEvent) => {
+    onLayout(ex.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height);
+  };
+
+  // Dragging is only triggered from the grip handle (not the whole row) since
+  // the row itself is full of text inputs and buttons that need normal touch
+  // handling — a full-row long-press would fight with typing and tapping.
+  const pan = createDragGesture({
+    rawTranslateY,
+    onDragStart: () => onDragStart(ex.id),
+    onDragUpdate,
+    onDragEnd: (translationY) => onDragEnd(ex.id, translationY),
+  });
+
+  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, 0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: isActive ? rawTranslateY.value + scrollDelta.value : shiftY.value }],
+  }));
+
   return (
-    <View style={[styles.exRow, !isLast && { borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+    <Animated.View
+      onLayout={handleLayout}
+      style={[
+        styles.exRow,
+        { backgroundColor: theme.s1 },
+        !isLast && { borderBottomWidth: 1, borderBottomColor: theme.border },
+        isActive && styles.exRowActive,
+        animatedStyle,
+      ]}
+    >
       <View style={styles.exTop}>
+        <GestureDetector gesture={pan}>
+          <View style={styles.gripHandle} hitSlop={8}>
+            <Icon name="grip" size={16} color={theme.muted2} />
+          </View>
+        </GestureDetector>
         <TextInput
           value={ex.name}
           onChangeText={(v) => onChange('name', v)}
@@ -185,7 +256,7 @@ function ExerciseEditRow({
           })}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -231,7 +302,9 @@ const styles = StyleSheet.create({
   removeSessionBtn: { alignItems: 'center', paddingVertical: 12 },
   removeSessionText: { fontSize: 12, fontWeight: '500' },
   exRow: { padding: 12, gap: 9 },
+  exRowActive: { elevation: 6, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, zIndex: 10 },
   exTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  gripHandle: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   exNums: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' },
   input: { fontSize: 12.5, borderRadius: 6, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 8 },
   inputGrow: { flex: 1 },

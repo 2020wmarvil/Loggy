@@ -8,11 +8,10 @@ import { WeatherPill } from '@/components/WeatherPill';
 import { WorkoutCard } from '@/components/WorkoutCard';
 import { toDateStr, fmtDate } from '@/lib/date';
 import { getLastLog, getTodaySchedule } from '@/lib/progression';
-import { getRoutineForDay } from '@/lib/routine';
+import { getRoutineForDay, isTimePast } from '@/lib/routine';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
 import { useLogs } from '@/store/useLogs';
 import { useRoutine } from '@/store/useRoutine';
-import { useRoutineChecks } from '@/store/useRoutineChecks';
 import { useSettings } from '@/store/useSettings';
 import { useTheme } from '@/theme/ThemeContext';
 import { tabBarHeight } from '@/theme/tokens';
@@ -26,12 +25,10 @@ export default function TodayScreen() {
   const { program } = useLiftingProgram();
   const { logs } = useLogs();
   const { routine } = useRoutine();
-  const { routineChecks, toggle } = useRoutineChecks();
   const { settings } = useSettings();
 
   const schedule = getTodaySchedule(program, today);
   const routineItems = getRoutineForDay(routine, today.getDay());
-  const dayChecks = routineChecks[todayStr] || {};
 
   return (
     <ScrollView style={{ backgroundColor: theme.bg }} contentContainerStyle={{ paddingBottom: tabBarHeight + 16 }}>
@@ -50,10 +47,10 @@ export default function TodayScreen() {
           <View style={styles.scheduleHeader}>
             <Text style={[styles.sectionLabel, { color: theme.muted }]}>Today&apos;s Schedule</Text>
             <Text style={[styles.scheduleCount, { color: theme.muted }]}>
-              {routineItems.filter((i) => dayChecks[i.id]).length} / {routineItems.length}
+              {routineItems.filter((i) => isTimePast(i.time, today)).length} / {routineItems.length}
             </Text>
           </View>
-          <Timeline items={routineItems} checks={dayChecks} onToggle={(id) => toggle(todayStr, id)} />
+          <Timeline items={routineItems} now={today} />
         </View>
       )}
 

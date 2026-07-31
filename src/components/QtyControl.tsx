@@ -11,18 +11,19 @@ interface QtyControlProps {
   max?: number;
   step?: number;
   unit?: string;
+  disabled?: boolean;
 }
 
-export function QtyControl({ value, onChange, min = 0, max = 9999, step = 1, unit }: QtyControlProps) {
+export function QtyControl({ value, onChange, min = 0, max = 9999, step = 1, unit, disabled }: QtyControlProps) {
   const theme = useTheme();
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.s2, borderColor: theme.border }]}>
-      <Pressable hitSlop={8} onPress={() => onChange(Math.max(min, value - step))}>
+    <View style={[styles.wrap, { backgroundColor: theme.s2, borderColor: theme.border, opacity: disabled ? 0.55 : 1 }]}>
+      <Pressable hitSlop={8} disabled={disabled} onPress={() => onChange(Math.max(min, value - step))}>
         <Text style={[styles.btn, { color: theme.muted }]}>−</Text>
       </Pressable>
       <Text style={[styles.val, { color: theme.text }]}>{value}</Text>
       {unit ? <Text style={[styles.unit, { color: theme.muted }]}>{unit}</Text> : null}
-      <Pressable hitSlop={8} onPress={() => onChange(Math.min(max, value + step))}>
+      <Pressable hitSlop={8} disabled={disabled} onPress={() => onChange(Math.min(max, value + step))}>
         <Text style={[styles.btn, { color: theme.muted }]}>+</Text>
       </Pressable>
     </View>

@@ -1,18 +1,30 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Icon } from '@/components/Icon';
 import { ProgressBar } from '@/components/ProgressBar';
 import { QtyControl } from '@/components/QtyControl';
 import { Exercise, LogEntry, Session } from '@/data/types';
-import { toDateStr, fmtDate } from '@/lib/date';
+import { toDateStr, fmtDate, formatDuration } from '@/lib/date';
 import { calcGoal, getLastLog, getSession } from '@/lib/progression';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
 import { useLogs } from '@/store/useLogs';
 import { useTheme } from '@/theme/ThemeContext';
 import { Theme } from '@/theme/colors';
 import { radii, weight650 } from '@/theme/tokens';
+
+function confirmFinish(onConfirm: () => void, remaining: number) {
+  const message = `Finish this workout with ${remaining} set${remaining === 1 ? '' : 's'} not marked done?`;
+  if (Platform.OS === 'web') {
+    if (window.confirm(message)) onConfirm();
+    return;
+  }
+  Alert.alert('Finish workout?', message, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: 'Finish', style: 'destructive', onPress: onConfirm },
+  ]);
+}
 
 type SetInput = { reps: number; weight: number; done: boolean };
 type Inputs = Record<string, Record<number, SetInput>>;
@@ -22,7 +34,7 @@ export default function WorkoutLoggerScreen() {
   const router = useRouter();
   const { programId, sessionId } = useLocalSearchParams<{ programId: string; sessionId: string }>();
   const { program } = useLiftingProgram();
-  const { logs, saveSession } = useLogs();
+  const { logs, saveSession, hydrated } = useLogs();
 
   const today = useMemo(() => new Date(), []);
   const todayStr = toDateStr(today);
@@ -31,9 +43,34 @@ export default function WorkoutLoggerScreen() {
   const sess = getSession(program, sid);
   const existing = logs[todayStr]?.[pid]?.[sid];
   const lastLog = getLastLog(logs, pid, sid, todayStr);
+  const readOnly = !!existing?.completed;
 
   const [inputs, setInputs] = useState<Inputs>(() => initInputs(sess, existing, lastLog));
   const [showDone, setShowDone] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  // The session "starts" — and its timer begins — the first time it's opened
+  // for the day. Waiting on `hydrated` avoids racing AsyncStorage's async read:
+  // without it, a fresh app launch would see `existing` as undefined for a
+  // moment and stamp a bogus new startedAt over a real one from earlier today.
+  useEffect(() => {
+    if (!hydrated || existing?.completed || existing?.startedAt) return;
+    saveSession(todayStr, pid, sid, { startedAt: new Date().toISOString() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  const startedAtIso = existing?.startedAt;
+  useEffect(() => {
+    if (!startedAtIso || existing?.completed) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAtIso, existing?.completed]);
+
+  const elapsedSeconds = existing?.completed
+    ? existing.durationSeconds ?? 0
+    : startedAtIso
+      ? Math.max(0, Math.floor((nowTick - new Date(startedAtIso).getTime()) / 1000))
+      : 0;
 
   if (!sess) {
     return (
@@ -53,21 +90,23 @@ export default function WorkoutLoggerScreen() {
     return exercises;
   };
 
-  const persist = (current: Inputs, complete = false) => {
-    saveSession(todayStr, pid, sid, buildExercises(current), complete);
+  const persist = (current: Inputs, patch: Partial<LogEntry> = {}) => {
+    saveSession(todayStr, pid, sid, { exercises: buildExercises(current), ...patch });
   };
 
   const update = (exId: string, si: number, field: 'reps' | 'weight', val: number) => {
+    if (readOnly) return;
     setInputs((p) => ({ ...p, [exId]: { ...p[exId], [si]: { ...p[exId][si], [field]: val } } }));
   };
 
   const toggle = (exId: string, si: number) => {
+    if (readOnly) return;
     // Compute the next value from the current render's `inputs` and persist it as two
     // plain effects of this event handler — persisting from inside the setInputs updater
     // itself would call another component's setState mid-render, which React disallows.
     const next: Inputs = { ...inputs, [exId]: { ...inputs[exId], [si]: { ...inputs[exId][si], done: !inputs[exId][si].done } } };
     setInputs(next);
-    persist(next, false);
+    persist(next, { completed: false });
   };
 
   const completedSets = sess.exercises.reduce((a, ex) => a + Object.values(inputs[ex.id] || {}).filter((s) => s.done).length, 0);
@@ -75,13 +114,18 @@ export default function WorkoutLoggerScreen() {
   const allDone = completedSets === totalSets;
 
   const handleBack = () => {
-    persist(inputs, false);
+    if (!readOnly) persist(inputs, { completed: false });
     router.back();
   };
 
   const handleFinish = () => {
-    persist(inputs, true);
+    persist(inputs, { completed: true, durationSeconds: elapsedSeconds });
     setShowDone(true);
+  };
+
+  const handleFinishPress = () => {
+    if (allDone) handleFinish();
+    else confirmFinish(handleFinish, totalSets - completedSets);
   };
 
   const accent = theme.green;
@@ -100,22 +144,36 @@ export default function WorkoutLoggerScreen() {
             {completedSets} / {totalSets} sets
           </Text>
         </View>
-        {allDone && (
-          <Pressable onPress={handleFinish} style={[styles.finBtn, { backgroundColor: theme.greenMid }]}>
-            <Text style={[styles.finBtnText, { color: accent }]}>Finish ✓</Text>
-          </Pressable>
-        )}
+        <Text style={[styles.timerText, { color: readOnly ? theme.muted : accent }]}>{formatDuration(elapsedSeconds)}</Text>
       </View>
 
       <View style={styles.pbarWrap}>
         <ProgressBar progress={totalSets ? completedSets / totalSets : 0} color={accent} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: readOnly ? 32 : 96 }}>
         {sess.exercises.map((ex) => (
-          <ExerciseBlock key={ex.id} ex={ex} lastLog={lastLog} inputs={inputs} onUpdate={update} onToggle={toggle} theme={theme} accent={accent} />
+          <ExerciseBlock
+            key={ex.id}
+            ex={ex}
+            lastLog={lastLog}
+            inputs={inputs}
+            onUpdate={update}
+            onToggle={toggle}
+            theme={theme}
+            accent={accent}
+            disabled={readOnly}
+          />
         ))}
       </ScrollView>
+
+      {!readOnly && (
+        <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
+          <Pressable onPress={handleFinishPress} style={[styles.finishBar, { backgroundColor: accent }]}>
+            <Text style={styles.finishBarText}>Finish Workout</Text>
+          </Pressable>
+        </View>
+      )}
 
       {showDone && (
         <View style={[styles.overlay, { backgroundColor: `${theme.bg}f5` }]}>
@@ -124,7 +182,7 @@ export default function WorkoutLoggerScreen() {
           <Text style={[styles.overlaySub, { color: theme.muted }]}>
             {program.name} · {sess.name}
             {'\n'}
-            {fmtDate(today)}
+            {fmtDate(today)} · {formatDuration(elapsedSeconds)}
           </Text>
           <Pressable
             onPress={() => {
@@ -163,6 +221,7 @@ function ExerciseBlock({
   onToggle,
   theme,
   accent,
+  disabled,
 }: {
   ex: Exercise;
   lastLog: ReturnType<typeof getLastLog>;
@@ -171,6 +230,7 @@ function ExerciseBlock({
   onToggle: (exId: string, si: number) => void;
   theme: Theme;
   accent: string;
+  disabled: boolean;
 }) {
   const g = calcGoal(ex, lastLog);
   const lastSets = lastLog?.exercises?.[ex.id] || [];
@@ -242,12 +302,19 @@ function ExerciseBlock({
             <View style={styles.setRowBottom}>
               <View style={styles.setInputs}>
                 {ex.type === 'weighted' && (
-                  <QtyControl value={s.weight} onChange={(v) => onUpdate(ex.id, i, 'weight', v)} step={2.5} unit="lbs" />
+                  <QtyControl value={s.weight} onChange={(v) => onUpdate(ex.id, i, 'weight', v)} step={2.5} unit="lbs" disabled={disabled} />
                 )}
-                <QtyControl value={s.reps} onChange={(v) => onUpdate(ex.id, i, 'reps', v)} min={1} unit={ex.type === 'time' ? ex.unit || 's' : 'reps'} />
+                <QtyControl
+                  value={s.reps}
+                  onChange={(v) => onUpdate(ex.id, i, 'reps', v)}
+                  min={1}
+                  unit={ex.type === 'time' ? ex.unit || 's' : 'reps'}
+                  disabled={disabled}
+                />
               </View>
               <Pressable
                 onPress={() => onToggle(ex.id, i)}
+                disabled={disabled}
                 style={[styles.checkBtn, { borderColor: s.done ? accent : theme.border2, backgroundColor: s.done ? accent : 'transparent' }]}
               >
                 {s.done && <Icon name="check" size={13} color={theme.white} strokeWidth={2.5} />}
@@ -267,8 +334,7 @@ const styles = StyleSheet.create({
   headTitle: { flex: 1 },
   headName: { fontSize: 17, fontWeight: weight650, letterSpacing: -0.34 },
   headSub: { fontSize: 11.5, marginTop: 1 },
-  finBtn: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 20 },
-  finBtnText: { fontSize: 12.5, fontWeight: '600' },
+  timerText: { fontSize: 15, fontWeight: weight650, fontVariant: ['tabular-nums'], letterSpacing: -0.15 },
   pbarWrap: { paddingHorizontal: 20, paddingTop: 10 },
   exBlock: { marginHorizontal: 20, marginTop: 14, borderRadius: radii.card, borderWidth: 1, overflow: 'hidden' },
   exHead: { padding: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
@@ -287,6 +353,9 @@ const styles = StyleSheet.create({
   setRowBottom: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   setInputs: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   checkBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 16, borderTopWidth: 1 },
+  finishBar: { paddingVertical: 14, borderRadius: radii.card, alignItems: 'center' },
+  finishBarText: { fontSize: 15, fontWeight: '700', color: '#000' },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 18, paddingHorizontal: 40 },
   overlayIcon: { fontSize: 56 },
   overlayTitle: { fontSize: 26, fontWeight: '700', letterSpacing: -0.78 },

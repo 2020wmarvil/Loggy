@@ -34,16 +34,27 @@ export function useSettings() {
   }, [settings.notifEnabled, routine, notificationIds, setNotificationIds, setSettings]);
 
   // Keep scheduled notifications in sync whenever the routine is edited
-  // while alerts are enabled (adding/removing/retiming items).
+  // while alerts are enabled (adding/removing/retiming items). Debounced so
+  // that typing in an activity/time field doesn't reschedule on every
+  // keystroke — without this, rapid overlapping reschedules race on
+  // setNotificationIds (last write wins) and orphan the losing batches,
+  // which still fire since nothing ever cancels them.
   useEffect(() => {
     if (!settings.notifEnabled) return;
     let cancelled = false;
-    (async () => {
-      const ids = await rescheduleRoutineNotifications(notificationIds, routine);
-      if (!cancelled) setNotificationIds(ids);
-    })();
+    const timer = setTimeout(() => {
+      (async () => {
+        const ids = await rescheduleRoutineNotifications(notificationIds, routine);
+        if (cancelled) {
+          await cancelRoutineNotifications(ids);
+          return;
+        }
+        setNotificationIds(ids);
+      })();
+    }, 800);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.notifEnabled, routine]);

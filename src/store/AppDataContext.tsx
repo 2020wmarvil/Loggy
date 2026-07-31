@@ -1,14 +1,13 @@
 import React, { createContext, useContext } from 'react';
 
 import { useAsyncStorageState, StorageKeys } from '@/lib/storage';
-import { Session, RoutineData, RoutineChecks, Logs, Settings, NoteEntry, MaxEntry, Quote } from '@/data/types';
+import { Session, RoutineData, Logs, Settings, NoteEntry, MaxEntry, Quote } from '@/data/types';
 
 type Updater<T> = (next: T | ((prev: T) => T)) => void;
 
 interface AppDataContextValue {
   liftingSessions: Session[]; setLiftingSessions: Updater<Session[]>;
   routine: RoutineData; setRoutine: Updater<RoutineData>;
-  routineChecks: RoutineChecks; setRoutineChecks: Updater<RoutineChecks>;
   logs: Logs; setLogs: Updater<Logs>;
   settings: Settings; setSettings: Updater<Settings>;
   notes: NoteEntry[]; setNotes: Updater<NoteEntry[]>;
@@ -28,7 +27,6 @@ const SETTINGS_DEFAULTS: Settings = { notifEnabled: false, accent: 'green', show
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [liftingSessions, setLiftingSessions, h1] = useAsyncStorageState<Session[]>(StorageKeys.LiftingProgram, []);
   const [routine, setRoutine, h2] = useAsyncStorageState<RoutineData>(StorageKeys.Routine, {});
-  const [routineChecks, setRoutineChecks, h3] = useAsyncStorageState<RoutineChecks>(StorageKeys.RoutineChecks, {});
   const [logs, setLogs, h4] = useAsyncStorageState<Logs>(StorageKeys.Logs, {});
   const [settings, setSettings, h5] = useAsyncStorageState<Settings>(StorageKeys.Settings, SETTINGS_DEFAULTS);
   const [notes, setNotes, h6] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Notes, []);
@@ -42,7 +40,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const value: AppDataContextValue = {
     liftingSessions, setLiftingSessions,
     routine, setRoutine,
-    routineChecks, setRoutineChecks,
     logs, setLogs,
     settings, setSettings,
     notes, setNotes,
@@ -52,7 +49,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     aphorisms, setAphorisms,
     aphorismSheetUrl, setAphorismSheetUrl,
     aphorismSyncedAt, setAphorismSyncedAt,
-    hydrated: h1 && h2 && h3 && h4 && h5 && h6 && h7 && h8 && h9 && h10 && h11 && h12,
+    hydrated: h1 && h2 && h4 && h5 && h6 && h7 && h8 && h9 && h10 && h11 && h12,
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

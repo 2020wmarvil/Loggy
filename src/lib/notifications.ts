@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 import { RoutineData } from '@/data/types';
-import { getRoutineForDay } from '@/lib/routine';
+import { getRoutineForDay, parseTime } from '@/lib/routine';
 
 // expo-notifications registers a push-token-change listener as a top-level
 // side effect of merely importing it, and that registration itself throws
@@ -59,10 +59,9 @@ export async function scheduleRoutineNotifications(routine: RoutineData): Promis
   try {
     for (let dow = 0; dow <= 6; dow++) {
       for (const item of getRoutineForDay(routine, dow)) {
-        const [hourStr, minuteStr] = item.time.split(':');
-        const hour = Number(hourStr);
-        const minute = Number(minuteStr);
-        if (Number.isNaN(hour) || Number.isNaN(minute)) continue;
+        const parsed = parseTime(item.time);
+        if (!parsed) continue;
+        const { hour, minute } = parsed;
         const id = await Notifications.scheduleNotificationAsync({
           content: { title: 'Loggy', body: item.activity },
           trigger: {

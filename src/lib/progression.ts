@@ -75,6 +75,7 @@ export interface WeekEntry {
   programId: string;
   sessionId: string;
   completed: boolean;
+  durationSeconds?: number;
   exercises: LogEntry['exercises'];
 }
 
@@ -90,7 +91,14 @@ export function groupByWeek(logs: Logs): WeekGroup[] {
     for (const progId of Object.keys(logs[date])) {
       for (const sessId of Object.keys(logs[date][progId])) {
         const e = logs[date][progId][sessId];
-        all.push({ date, programId: progId, sessionId: sessId, completed: e.completed, exercises: e.exercises });
+        all.push({
+          date,
+          programId: progId,
+          sessionId: sessId,
+          completed: e.completed,
+          durationSeconds: e.durationSeconds,
+          exercises: e.exercises,
+        });
       }
     }
   }

@@ -8,7 +8,7 @@ export function useLiftingProgram() {
   const { liftingSessions, setLiftingSessions } = useAppData();
 
   const program: Program = useMemo(
-    () => ({ id: LIFTING_PROGRAM_ID, name: 'Lifting', scheduledDays: [1, 2, 3, 4, 5], sessions: liftingSessions }),
+    () => ({ id: LIFTING_PROGRAM_ID, name: 'Program', scheduledDays: [1, 2, 3, 4, 5], sessions: liftingSessions }),
     [liftingSessions]
   );
 
@@ -67,5 +67,12 @@ export function useLiftingProgram() {
     [setLiftingSessions]
   );
 
-  return { program, addSession, removeSession, addExercise, updateExercise, deleteExercise };
+  const reorderExercises = useCallback(
+    (dayOfWeek: number, next: Exercise[]) => {
+      setLiftingSessions((list) => list.map((s) => (s.dayOfWeek !== dayOfWeek ? s : { ...s, exercises: next })));
+    },
+    [setLiftingSessions]
+  );
+
+  return { program, addSession, removeSession, addExercise, updateExercise, deleteExercise, reorderExercises };
 }

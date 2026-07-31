@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { TimeStepperField } from '@/components/TimeStepperField';
+import { formatTime12 } from '@/lib/routine';
 import { useRoutine } from '@/store/useRoutine';
 import { useTheme } from '@/theme/ThemeContext';
 import { radii, weight650 } from '@/theme/tokens';
@@ -12,18 +14,23 @@ const DFULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 
 export function ScheduleEditor() {
   const theme = useTheme();
-  const { getDay, updateItem, deleteItem, addItem } = useRoutine();
+  const { getDay, updateItem, deleteItem, addItem, sortDay } = useRoutine();
   const todayDow = new Date().getDay();
   const [selDow, setSelDow] = useState(todayDow);
   const [editing, setEditing] = useState(false);
   const items = getDay(selDow);
+
+  const toggleEditing = () => {
+    if (editing) sortDay(selDow);
+    setEditing((e) => !e);
+  };
 
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: theme.text }]}>Daily Schedule</Text>
         <Pressable
-          onPress={() => setEditing((e) => !e)}
+          onPress={toggleEditing}
           style={[
             styles.editBtn,
             { backgroundColor: editing ? theme.greenDim : theme.s2, borderColor: editing ? theme.greenMid : theme.border },
@@ -65,12 +72,10 @@ export function ScheduleEditor() {
                 key={item.id}
                 style={[styles.editRow, idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}
               >
-                <TextInput
-                  value={item.time}
-                  onChangeText={(v) => updateItem(selDow, idx, 'time', v)}
-                  placeholder="8:00"
-                  placeholderTextColor={theme.muted2}
-                  style={[styles.input, styles.inputTime, { backgroundColor: theme.s2, borderColor: theme.border2, color: theme.text }]}
+                <TimeStepperField
+                  time={item.time}
+                  onChange={(v) => updateItem(selDow, idx, 'time', v)}
+                  onClose={() => sortDay(selDow)}
                 />
                 <TextInput
                   value={item.activity}
@@ -97,7 +102,7 @@ export function ScheduleEditor() {
               style={[styles.viewRow, idx < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}
             >
               <Text style={[styles.viewName, { color: theme.text }]}>{item.activity}</Text>
-              <Text style={[styles.viewTime, { color: theme.muted }]}>{item.time}</Text>
+              <Text style={[styles.viewTime, { color: theme.muted }]}>{formatTime12(item.time)}</Text>
             </View>
           ))
         )}
@@ -119,7 +124,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: radii.card, borderWidth: 1, overflow: 'hidden' },
   editRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12 },
   input: { fontSize: 12.5, borderRadius: 6, borderWidth: 1, paddingVertical: 6, paddingHorizontal: 8 },
-  inputTime: { width: 56, flexShrink: 0 },
   inputGrow: { flex: 1 },
   delBtn: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   addBtn: { margin: 10, padding: 9, borderRadius: radii.sm, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center' },

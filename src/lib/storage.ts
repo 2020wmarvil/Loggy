@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const StorageKeys = {
   LiftingProgram: '@loggy/lifting_program',
   Routine: '@loggy/routine',
-  RoutineChecks: '@loggy/routine_checks',
   Logs: '@loggy/logs',
   Settings: '@loggy/settings',
   Notes: '@loggy/notes',

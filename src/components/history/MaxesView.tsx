@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { DatePickerField } from '@/components/DatePickerField';
 import { MaxEntry } from '@/data/types';
 import { fmtShort, toDateStr } from '@/lib/date';
 import { useMaxes } from '@/store/useMaxes';
@@ -72,13 +73,7 @@ export function MaxesView() {
                         />
                         <Text style={[styles.lbsLabel, { color: theme.muted }]}>lbs</Text>
                       </View>
-                      <TextInput
-                        value={draft.date}
-                        onChangeText={(v) => setDraft((d) => ({ ...d, date: v }))}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={theme.muted2}
-                        style={[styles.input, { backgroundColor: theme.s2, borderColor: theme.border2, color: theme.text }]}
-                      />
+                      <DatePickerField date={draft.date} onChange={(v) => setDraft((d) => ({ ...d, date: v }))} />
                     </View>
                     <View style={styles.editActions}>
                       <Pressable onPress={() => save(m.id)} style={[styles.submitBtn, { backgroundColor: theme.green }]}>

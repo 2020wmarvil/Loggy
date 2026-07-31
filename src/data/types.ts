@@ -33,6 +33,8 @@ export interface SetEntry {
 
 export interface LogEntry {
   completed: boolean;
+  startedAt?: string; // ISO timestamp, set once when the session is first opened for the day
+  durationSeconds?: number; // frozen once the session is finished
   exercises: { [exerciseId: string]: SetEntry[] };
 }
 
@@ -52,9 +54,6 @@ export interface RoutineItem {
 
 // dayOfWeek -> items (without ids; ids are derived on read)
 export type RoutineData = { [dayOfWeek: number]: Omit<RoutineItem, 'id'>[] };
-
-// dateStr -> routineItemId -> checked
-export type RoutineChecks = { [dateStr: string]: { [itemId: string]: boolean } };
 
 export interface NoteEntry {
   id: string;

@@ -11,12 +11,19 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { LinearTransition, runOnJS, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
 import { NoteEntry, NotesFontSize } from '@/data/types';
 import { fmtShort } from '@/lib/date';
-import { createDragGesture, DragInfo, Layout, useDraggableList, useDragRowShift } from '@/hooks/useDraggableList';
+import {
+  createDragGesture,
+  DragInfo,
+  DROP_MS,
+  Layout,
+  useDraggableList,
+  useDragRowShift,
+} from '@/hooks/useDraggableList';
 import { useTheme } from '@/theme/ThemeContext';
 import { noteFontSizes, radii, tabBarHeight } from '@/theme/tokens';
 
@@ -53,13 +60,15 @@ interface NoteRowProps {
   sizes: (typeof noteFontSizes)[NotesFontSize];
   rawTranslateY: SharedValue<number>;
   scrollDelta: SharedValue<number>;
+  dropping: SharedValue<number>;
   onLayout: (id: string, y: number, height: number) => void;
   onBeginEdit: (n: NoteEntry) => void;
   onDismissReveal: () => void;
   onDelete: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragUpdate: (absoluteY: number) => void;
-  onDragEnd: (id: string, translationY: number) => void;
+  onDragEnd: (id: string, netTranslationY: number) => void;
+  onDropSettled: () => void;
 }
 
 function NoteRow({
@@ -71,6 +80,7 @@ function NoteRow({
   sizes,
   rawTranslateY,
   scrollDelta,
+  dropping,
   onLayout,
   onBeginEdit,
   onDismissReveal,
@@ -78,6 +88,7 @@ function NoteRow({
   onDragStart,
   onDragUpdate,
   onDragEnd,
+  onDropSettled,
 }: NoteRowProps) {
   const isActive = dragInfo?.id === note.id;
 
@@ -95,14 +106,17 @@ function NoteRow({
 
   const pan = createDragGesture({
     rawTranslateY,
+    scrollDelta,
+    dropping,
     onDragStart: () => onDragStart(note.id),
     onDragUpdate,
-    onDragEnd: (translationY) => onDragEnd(note.id, translationY),
+    onDragEnd: (netTranslationY) => onDragEnd(note.id, netTranslationY),
+    onDropSettled,
   });
 
   const gesture = Gesture.Exclusive(pan, tap);
 
-  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, LIST_GAP);
+  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, dropping, LIST_GAP);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: isActive ? rawTranslateY.value + scrollDelta.value : shiftY.value }],
@@ -111,6 +125,9 @@ function NoteRow({
   return (
     <Animated.View
       onLayout={handleLayout}
+      // Animates the reorder rather than jumping to it, over the same DROP_MS
+      // the transforms unwind across. See the note on DROP_MS.
+      layout={LinearTransition.duration(DROP_MS)}
       style={[
         styles.card,
         { backgroundColor: theme.s1, borderColor: isActive || revealed ? theme.green : theme.border },
@@ -161,10 +178,12 @@ export function EditableNotesList({
     layoutsRef,
     rawTranslateY,
     scrollDelta,
+    dropping,
     registerLayout,
     handleDragStart: baseHandleDragStart,
     handleDragUpdate,
     handleDragEnd,
+    handleDropSettled,
     scrollHandlers,
   } = useDraggableList<NoteEntry>({
     items: list,
@@ -214,6 +233,7 @@ export function EditableNotesList({
               sizes={sizes}
               rawTranslateY={rawTranslateY}
               scrollDelta={scrollDelta}
+              dropping={dropping}
               onLayout={registerLayout}
               onBeginEdit={beginEdit}
               onDismissReveal={dismissReveal}
@@ -224,6 +244,7 @@ export function EditableNotesList({
               onDragStart={handleDragStart}
               onDragUpdate={handleDragUpdate}
               onDragEnd={handleDragEnd}
+              onDropSettled={handleDropSettled}
             />
           ))}
         </ScrollView>

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { LiftingEditor } from '@/components/LiftingEditor';
 import { ScheduleEditor } from '@/components/ScheduleEditor';
+import { DraggableListScrollHandlers } from '@/hooks/useDraggableList';
 import { NotesFontSize } from '@/data/types';
 import { ACCENTS, AccentKey } from '@/theme/colors';
 import { useSettings } from '@/store/useSettings';
@@ -20,12 +21,26 @@ export default function SettingsScreen() {
   const { settings, setAccent, toggleWeather, toggleNotifications, setNotesFontSize } = useSettings();
   const notesFontSize = settings.notesFontSize ?? 'medium';
 
+  // The Program editor's drag-to-reorder auto-scrolls this ScrollView, but
+  // the scroll/layout handlers it needs live inside LiftingEditor (only it
+  // knows about the drag). scrollHandlersRef bridges them back up — see the
+  // prop comment on LiftingEditor.
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollHandlersRef = useRef<DraggableListScrollHandlers | null>(null);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={styles.head}>
         <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: tabBarHeight + 16 }}>
+      <ScrollView
+        ref={scrollRef}
+        scrollEventThrottle={16}
+        onScroll={(e) => scrollHandlersRef.current?.onScroll(e)}
+        onLayout={(e) => scrollHandlersRef.current?.onLayout(e)}
+        onContentSizeChange={(w, h) => scrollHandlersRef.current?.onContentSizeChange(w, h)}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: tabBarHeight + 16 }}
+      >
         <View style={[styles.prefCard, { backgroundColor: theme.s1, borderColor: theme.border }]}>
           <View style={[styles.prefRow, { borderBottomColor: theme.border }]}>
             <View style={styles.prefText}>
@@ -76,7 +91,7 @@ export default function SettingsScreen() {
         </View>
 
         <ScheduleEditor />
-        <LiftingEditor />
+        <LiftingEditor scrollRef={scrollRef} scrollHandlersRef={scrollHandlersRef} />
       </ScrollView>
     </View>
   );

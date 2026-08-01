@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { LinearTransition, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
-import { createDragGesture, DragInfo, Layout, useDraggableList, useDragRowShift } from '@/hooks/useDraggableList';
+import {
+  createDragGesture,
+  DragInfo,
+  DraggableListScrollHandlers,
+  DROP_MS,
+  Layout,
+  useDraggableList,
+  useDragRowShift,
+} from '@/hooks/useDraggableList';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
 import { Exercise, ExerciseType } from '@/data/types';
 import { useTheme } from '@/theme/ThemeContext';
@@ -17,7 +25,21 @@ const DFULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 const EX_TYPES: ExerciseType[] = ['weighted', 'time'];
 const TYPE_LABEL: Record<ExerciseType, string> = { weighted: 'Weighted', time: 'Time' };
 
-export function LiftingEditor() {
+interface LiftingEditorProps {
+  // The Program list lives inside a ScrollView owned by the settings screen
+  // (it's stacked below other settings content, not its own scroll
+  // container), so edge auto-scroll needs that ScrollView's ref plus a way to
+  // hand its scroll/layout events back up — see scrollHandlersRef below.
+  scrollRef?: React.RefObject<ScrollView | null>;
+  // Populated (via effect, every render) with the handlers useDraggableList
+  // produces internally; the parent attaches them to its own ScrollView's
+  // onScroll/onLayout/onContentSizeChange props. Indirection through a ref
+  // rather than a direct prop because the parent renders its ScrollView
+  // before this component has a chance to produce the handlers.
+  scrollHandlersRef?: React.RefObject<DraggableListScrollHandlers | null>;
+}
+
+export function LiftingEditor({ scrollRef, scrollHandlersRef }: LiftingEditorProps) {
   const theme = useTheme();
   const { program, addSession, removeSession, addExercise, updateExercise, deleteExercise, reorderExercises } =
     useLiftingProgram();
@@ -26,12 +48,28 @@ export function LiftingEditor() {
   const [editing, setEditing] = useState(false);
   const sess = program.sessions.find((s) => s.dayOfWeek === selDow);
 
-  const { dragInfo, layoutsRef, rawTranslateY, scrollDelta, registerLayout, handleDragStart, handleDragUpdate, handleDragEnd } =
-    useDraggableList<Exercise>({
+  const {
+    dragInfo,
+    layoutsRef,
+    rawTranslateY,
+    scrollDelta,
+    dropping,
+    registerLayout,
+    handleDragStart,
+    handleDragUpdate,
+    handleDragEnd,
+    handleDropSettled,
+    scrollHandlers,
+  } = useDraggableList<Exercise>({
       items: sess?.exercises ?? [],
       keyExtractor: (ex) => ex.id,
       onReorder: (next) => reorderExercises(selDow, next),
+      scrollRef,
     });
+
+  useEffect(() => {
+    if (scrollHandlersRef) scrollHandlersRef.current = scrollHandlers;
+  });
 
   return (
     <View style={styles.section}>
@@ -99,10 +137,12 @@ export function LiftingEditor() {
                 myLayout={layoutsRef.current[ex.id]}
                 rawTranslateY={rawTranslateY}
                 scrollDelta={scrollDelta}
+                dropping={dropping}
                 onLayout={registerLayout}
                 onDragStart={handleDragStart}
                 onDragUpdate={handleDragUpdate}
                 onDragEnd={handleDragEnd}
+                onDropSettled={handleDropSettled}
                 onChange={(field, val) => updateExercise(selDow, exIdx, field, val)}
                 onDelete={() => deleteExercise(selDow, exIdx)}
               />
@@ -147,10 +187,12 @@ function ExerciseEditRow({
   myLayout,
   rawTranslateY,
   scrollDelta,
+  dropping,
   onLayout,
   onDragStart,
   onDragUpdate,
   onDragEnd,
+  onDropSettled,
   onChange,
   onDelete,
 }: {
@@ -161,10 +203,12 @@ function ExerciseEditRow({
   myLayout: Layout | undefined;
   rawTranslateY: SharedValue<number>;
   scrollDelta: SharedValue<number>;
+  dropping: SharedValue<number>;
   onLayout: (id: string, y: number, height: number) => void;
   onDragStart: (id: string) => void;
   onDragUpdate: (absoluteY: number) => void;
-  onDragEnd: (id: string, translationY: number) => void;
+  onDragEnd: (id: string, netTranslationY: number) => void;
+  onDropSettled: () => void;
   onChange: (field: keyof Exercise, val: Exercise[keyof Exercise]) => void;
   onDelete: () => void;
 }) {
@@ -179,12 +223,15 @@ function ExerciseEditRow({
   // handling — a full-row long-press would fight with typing and tapping.
   const pan = createDragGesture({
     rawTranslateY,
+    scrollDelta,
+    dropping,
     onDragStart: () => onDragStart(ex.id),
     onDragUpdate,
-    onDragEnd: (translationY) => onDragEnd(ex.id, translationY),
+    onDragEnd: (netTranslationY) => onDragEnd(ex.id, netTranslationY),
+    onDropSettled,
   });
 
-  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, 0);
+  const shiftY = useDragRowShift(dragInfo, isActive, myLayout, rawTranslateY, scrollDelta, dropping, 0);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: isActive ? rawTranslateY.value + scrollDelta.value : shiftY.value }],
@@ -193,6 +240,9 @@ function ExerciseEditRow({
   return (
     <Animated.View
       onLayout={handleLayout}
+      // Animates the reorder rather than jumping to it, over the same DROP_MS
+      // the transforms unwind across. See the note on DROP_MS.
+      layout={LinearTransition.duration(DROP_MS)}
       style={[
         styles.exRow,
         { backgroundColor: theme.s1 },

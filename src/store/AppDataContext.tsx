@@ -14,6 +14,8 @@ interface AppDataContextValue {
   philosophy: NoteEntry[]; setPhilosophy: Updater<NoteEntry[]>;
   maxes: MaxEntry[]; setMaxes: Updater<MaxEntry[]>;
   notificationIds: Record<string, string>; setNotificationIds: Updater<Record<string, string>>;
+  aphorismNotificationIds: Record<string, string>; setAphorismNotificationIds: Updater<Record<string, string>>;
+  aphorismNotifScheduledDate: string | null; setAphorismNotifScheduledDate: Updater<string | null>;
   aphorisms: Quote[]; setAphorisms: Updater<Quote[]>;
   aphorismSheetUrl: string | null; setAphorismSheetUrl: Updater<string | null>;
   aphorismSyncedAt: string | null; setAphorismSyncedAt: Updater<string | null>;
@@ -33,6 +35,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [philosophy, setPhilosophy, h7] = useAsyncStorageState<NoteEntry[]>(StorageKeys.Philosophy, []);
   const [maxes, setMaxes, h8] = useAsyncStorageState<MaxEntry[]>(StorageKeys.Maxes, []);
   const [notificationIds, setNotificationIds, h9] = useAsyncStorageState<Record<string, string>>(StorageKeys.NotificationIds, {});
+  const [aphorismNotificationIds, setAphorismNotificationIds, h9b] = useAsyncStorageState<Record<string, string>>(StorageKeys.AphorismNotificationIds, {});
+  const [aphorismNotifScheduledDate, setAphorismNotifScheduledDate, h9c] = useAsyncStorageState<string | null>(StorageKeys.AphorismNotifScheduledDate, null);
   const [aphorisms, setAphorisms, h10] = useAsyncStorageState<Quote[]>(StorageKeys.Aphorisms, []);
   const [aphorismSheetUrl, setAphorismSheetUrl, h11] = useAsyncStorageState<string | null>(StorageKeys.AphorismSheetUrl, null);
   const [aphorismSyncedAt, setAphorismSyncedAt, h12] = useAsyncStorageState<string | null>(StorageKeys.AphorismSyncedAt, null);
@@ -46,10 +50,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     philosophy, setPhilosophy,
     maxes, setMaxes,
     notificationIds, setNotificationIds,
+    aphorismNotificationIds, setAphorismNotificationIds,
+    aphorismNotifScheduledDate, setAphorismNotifScheduledDate,
     aphorisms, setAphorisms,
     aphorismSheetUrl, setAphorismSheetUrl,
     aphorismSyncedAt, setAphorismSyncedAt,
-    hydrated: h1 && h2 && h4 && h5 && h6 && h7 && h8 && h9 && h10 && h11 && h12,
+    hydrated: h1 && h2 && h4 && h5 && h6 && h7 && h8 && h9 && h9b && h9c && h10 && h11 && h12,
   };
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

@@ -284,7 +284,6 @@ function ExerciseEditRow({
           <>
             <NumField label="Min" value={ex.repMin} onChange={(v) => onChange('repMin', v)} theme={theme} />
             <NumField label="Max" value={ex.repMax} onChange={(v) => onChange('repMax', v)} theme={theme} />
-            <NumField label="Incr" value={ex.increment} onChange={(v) => onChange('increment', v)} theme={theme} />
             <NumField label="Start" value={ex.startWeight} onChange={(v) => onChange('startWeight', v)} theme={theme} />
           </>
         )}

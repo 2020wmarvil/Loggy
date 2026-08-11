@@ -28,6 +28,7 @@ import { useTheme } from '@/theme/ThemeContext';
 import { noteFontSizes, radii, tabBarHeight } from '@/theme/tokens';
 
 const LIST_GAP = 8;
+const PREVIEW_MAX_LINES = 12;
 
 interface EditableNotesListProps {
   list: NoteEntry[];
@@ -140,7 +141,11 @@ function NoteRow({
           {!!note.title && (
             <Text style={[styles.cardTitle, { color: theme.text, fontSize: sizes.cardTitle }]}>{note.title}</Text>
           )}
-          <Text style={[styles.cardText, { color: theme.text, fontSize: sizes.cardText, lineHeight: sizes.cardText * 1.6 }]}>
+          <Text
+            numberOfLines={PREVIEW_MAX_LINES}
+            ellipsizeMode="tail"
+            style={[styles.cardText, { color: theme.text, fontSize: sizes.cardText, lineHeight: sizes.cardText * 1.6 }]}
+          >
             {note.text}
           </Text>
         </View>

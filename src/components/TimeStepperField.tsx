@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   NativeScrollEvent,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { formatTime12, parseTime } from '@/lib/routine';
+import { palette } from '@/theme/colors';
 import { useTheme } from '@/theme/ThemeContext';
 import { radii, weight650 } from '@/theme/tokens';
 
@@ -99,7 +100,9 @@ export function TimeStepperField({ time, onChange, onClose }: TimeStepperFieldPr
 }
 
 const ITEM_HEIGHT = 60;
-const VISIBLE_COUNT = 3;
+// 5 rows (2 above/below the selection) instead of 3, so more values are
+// reachable by a direct tap without having to scroll one into view first.
+const VISIBLE_COUNT = 5;
 const PAD_COUNT = Math.floor(VISIBLE_COUNT / 2);
 // Looping columns render this many back-to-back copies of the values, giving
 // enough buffer that a single strong fling never reaches the real start/end of
@@ -123,7 +126,6 @@ interface WheelColumnProps {
 }
 
 function WheelColumn({ items, index, onCommit, loop = false }: WheelColumnProps) {
-  const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const didInit = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -161,9 +163,13 @@ function WheelColumn({ items, index, onCommit, loop = false }: WheelColumnProps)
     if (nearest !== lastTickIndex.current) {
       lastTickIndex.current = nearest;
       triggerTickHaptic();
+      onCommit(nearest);
     }
-    onCommit(nearest);
 
+    settleTo(y, nearest);
+  }
+
+  function settleTo(y: number, nearest: number) {
     if (settleTimer.current) clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => {
       // Only touch scrollTop once motion has fully stopped — nudging it mid-fling,
@@ -180,7 +186,68 @@ function WheelColumn({ items, index, onCommit, loop = false }: WheelColumnProps)
     }, 120);
   }
 
-  const renderedItems = loop ? Array.from({ length: LOOP_COPIES }, () => items).flat() : items;
+  // Lets a value be picked directly by tapping it (e.g. AM/PM, or a nearby
+  // hour/minute) instead of only via scroll-and-settle. Jumps straight there
+  // (no animation) since the user already told us exactly where they want to
+  // land — animating it would just delay a choice they already made.
+  //
+  // Read via a ref (see handleItemPressRef below) rather than closed over
+  // directly by the memoized item list, so that list doesn't need to be
+  // rebuilt just because onCommit's identity changed on a re-render.
+  function handleItemPress(itemIndex: number) {
+    triggerTickHaptic();
+    lastTickIndex.current = itemIndex;
+    onCommit(itemIndex);
+    scrollRef.current?.scrollTo({ y: baseOffsetFor(itemIndex), animated: false });
+  }
+  const handleItemPressRef = useRef(handleItemPress);
+  useLayoutEffect(() => {
+    handleItemPressRef.current = handleItemPress;
+  });
+
+  // `items`/`loop` never change identity for a mounted WheelColumn, but
+  // without memoizing this, every parent-triggered re-render (any routine
+  // edit, any tap) was rebuilding all 660 View+Text pairs for the minutes
+  // column from scratch — real work multiplied across every keystroke, and
+  // the remaining cause of the picker still feeling sluggish after switching
+  // off per-item Pressables.
+  //
+  // Only the loop copies near the middle (where settleTo always re-centers
+  // once scrolling stops, so the visible rows always live) are wrapped in a
+  // real Pressable, each closing over its own known index — reliable, unlike
+  // deriving the tapped item from touch position on one giant Pressable
+  // spanning the whole scrollable content (that measured inconsistently
+  // across engines and could resolve to a bogus, even out-of-range index).
+  // The remaining copies exist only as fling-buffer and are never visible at
+  // rest, so they don't need to be tappable — kept as plain, cheap Views.
+  const renderedItemViews = useMemo(() => {
+    if (!loop) {
+      return items.map((label, i) => (
+        <Pressable key={i} onPress={() => handleItemPressRef.current(i)} style={styles.wheelItem}>
+          <Text style={styles.wheelText}>{label}</Text>
+        </Pressable>
+      ));
+    }
+    const views: React.ReactNode[] = [];
+    for (let copy = 0; copy < LOOP_COPIES; copy++) {
+      const interactive = copy >= MIDDLE_COPY - 1 && copy <= MIDDLE_COPY + 1;
+      for (let j = 0; j < items.length; j++) {
+        const key = `${copy}-${j}`;
+        views.push(
+          interactive ? (
+            <Pressable key={key} onPress={() => handleItemPressRef.current(j)} style={styles.wheelItem}>
+              <Text style={styles.wheelText}>{items[j]}</Text>
+            </Pressable>
+          ) : (
+            <View key={key} style={styles.wheelItem}>
+              <Text style={styles.wheelText}>{items[j]}</Text>
+            </View>
+          )
+        );
+      }
+    }
+    return views;
+  }, [items, loop]);
 
   return (
     <ScrollView
@@ -192,11 +259,7 @@ function WheelColumn({ items, index, onCommit, loop = false }: WheelColumnProps)
       onScroll={handleScroll}
       contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * PAD_COUNT }}
     >
-      {renderedItems.map((label, i) => (
-        <View key={i} style={styles.wheelItem}>
-          <Text style={[styles.wheelText, { color: theme.muted }]}>{label}</Text>
-        </View>
-      ))}
+      {renderedItemViews}
     </ScrollView>
   );
 }
@@ -210,7 +273,11 @@ const styles = StyleSheet.create({
   wheelRow: { flexDirection: 'row', alignItems: 'center', position: 'relative' },
   wheelCol: { height: ITEM_HEIGHT * VISIBLE_COUNT, width: 56 },
   wheelItem: { height: ITEM_HEIGHT, alignItems: 'center', justifyContent: 'center' },
-  wheelText: { fontSize: 26, fontWeight: weight650, fontVariant: ['tabular-nums'] },
+  // Hardcoded rather than pulled from theme: muted is fixed regardless of
+  // accent (see makeTheme in theme/colors.ts), and not depending on theme
+  // here keeps this style static so the memoized item list above never needs
+  // to be invalidated.
+  wheelText: { fontSize: 26, fontWeight: weight650, fontVariant: ['tabular-nums'], color: palette.muted },
   // A single hairline-bordered band spanning the whole row, not per-column —
   // the classic wheel-picker "selection lens" look, instead of glowing the text.
   selectionBand: {

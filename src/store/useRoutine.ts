@@ -38,7 +38,13 @@ export function useRoutine() {
   const addItem = useCallback(
     (dow: number) => {
       const items = getRoutineForDay(routine, dow).map(({ id, ...rest }) => rest);
-      saveDay(dow, [...items, { time: '12:00', activity: 'New item', tag: 'rest' as RoutineTagKey }]);
+      const latestTime = items.reduce(
+        (latest, it) => (timeToMinutes(it.time) > timeToMinutes(latest) ? it.time : latest),
+        '00:00'
+      );
+      const next = [...items, { time: items.length ? latestTime : '12:00', activity: 'New item', tag: 'rest' as RoutineTagKey }];
+      next.sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
+      saveDay(dow, next);
     },
     [routine, saveDay]
   );

@@ -36,7 +36,7 @@ export function useLiftingProgram() {
                 ...s,
                 exercises: [
                   ...s.exercises,
-                  { id: `ex-${Date.now()}`, name: 'New Exercise', sets: 3, repMin: 8, repMax: 12, increment: 5, startWeight: 45, type: 'weighted' as ExerciseType },
+                  { id: `ex-${Date.now()}`, name: 'New Exercise', sets: 2, repMin: 8, repMax: 12, increment: 5, startWeight: 45, type: 'weighted' as ExerciseType },
                 ],
               }
         )

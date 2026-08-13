@@ -15,6 +15,7 @@ export const StorageKeys = {
   Aphorisms: '@loggy/aphorisms',
   AphorismSheetUrl: '@loggy/aphorism_sheet_url',
   AphorismSyncedAt: '@loggy/aphorism_synced_at',
+  NotifLog: '@loggy/notif_log',
 } as const;
 
 // Mirrors the prototype's localStorage-per-key model: one JSON blob per

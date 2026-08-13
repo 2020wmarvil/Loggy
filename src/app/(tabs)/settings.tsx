@@ -1,10 +1,11 @@
 import React, { useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { LiftingEditor } from '@/components/LiftingEditor';
 import { ScheduleEditor } from '@/components/ScheduleEditor';
 import { DraggableListScrollHandlers } from '@/hooks/useDraggableList';
 import { NotesFontSize } from '@/data/types';
+import { shareNotifLog } from '@/lib/notifLog';
 import { ACCENTS, AccentKey } from '@/theme/colors';
 import { useSettings } from '@/store/useSettings';
 import { useTheme } from '@/theme/ThemeContext';
@@ -18,7 +19,16 @@ const FONT_SIZE_OPTIONS: { key: NotesFontSize; label: string }[] = [
 
 export default function SettingsScreen() {
   const theme = useTheme();
-  const { settings, setAccent, toggleWeather, toggleNotifications, setNotesFontSize } = useSettings();
+  const {
+    settings,
+    setAccent,
+    toggleWeather,
+    toggleNotifications,
+    notifPending,
+    clearAllNotifications,
+    notifClearing,
+    setNotesFontSize,
+  } = useSettings();
   const notesFontSize = settings.notesFontSize ?? 'medium';
 
   // The Program editor's drag-to-reorder auto-scrolls this ScrollView, but
@@ -47,8 +57,32 @@ export default function SettingsScreen() {
               <Text style={[styles.prefLabel, { color: theme.text }]}>Schedule alerts</Text>
               <Text style={[styles.prefDesc, { color: theme.muted }]}>Notify when moving between schedule blocks</Text>
             </View>
-            <Toggle on={settings.notifEnabled} onPress={toggleNotifications} theme={{ green: theme.green, border2: theme.border2 }} />
+            <Toggle
+              on={settings.notifEnabled}
+              pending={notifPending}
+              onPress={toggleNotifications}
+              theme={{ green: theme.green, border2: theme.border2 }}
+            />
           </View>
+          <Pressable style={[styles.prefRow, { borderBottomColor: theme.border }]} onPress={() => shareNotifLog()}>
+            <View style={styles.prefText}>
+              <Text style={[styles.prefLabel, { color: theme.text }]}>Share notification log</Text>
+              <Text style={[styles.prefDesc, { color: theme.muted }]}>Export debug info for scheduled alerts</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            style={[styles.prefRow, { borderBottomColor: theme.border }]}
+            onPress={() => clearAllNotifications()}
+            disabled={notifClearing}
+          >
+            <View style={styles.prefText}>
+              <Text style={[styles.prefLabel, { color: theme.text }]}>Clear all scheduled alerts</Text>
+              <Text style={[styles.prefDesc, { color: theme.muted }]}>
+                Wipes every pending alarm for this app, including orphaned ones, and turns alerts off
+              </Text>
+            </View>
+            {notifClearing && <ActivityIndicator size="small" color={theme.muted} />}
+          </Pressable>
           <View style={[styles.prefRow, { borderBottomColor: theme.border }]}>
             <View style={styles.prefText}>
               <Text style={[styles.prefLabel, { color: theme.text }]}>Weather widget</Text>
@@ -97,13 +131,27 @@ export default function SettingsScreen() {
   );
 }
 
-function Toggle({ on, onPress, theme }: { on: boolean; onPress: () => void; theme: { green: string; border2: string } }) {
+function Toggle({
+  on,
+  onPress,
+  theme,
+  pending,
+}: {
+  on: boolean;
+  onPress: () => void;
+  theme: { green: string; border2: string };
+  pending?: boolean;
+}) {
   return (
     <Pressable
-      onPress={onPress}
-      style={[styles.toggle, { backgroundColor: on ? theme.green : theme.border2 }]}
+      onPress={pending ? undefined : onPress}
+      style={[styles.toggle, { backgroundColor: on ? theme.green : theme.border2 }, pending && styles.togglePending]}
     >
-      <View style={[styles.toggleThumb, on && styles.toggleThumbOn]} />
+      {pending ? (
+        <ActivityIndicator size="small" color="#fff" style={styles.toggleSpinner} />
+      ) : (
+        <View style={[styles.toggleThumb, on && styles.toggleThumbOn]} />
+      )}
     </Pressable>
   );
 }
@@ -122,6 +170,8 @@ const styles = StyleSheet.create({
   accentRow: { paddingVertical: 13, paddingHorizontal: 14, flexDirection: 'row', gap: 11, flexWrap: 'wrap' },
   swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 2 },
   toggle: { width: 34, height: 18, borderRadius: 9, justifyContent: 'center' },
+  togglePending: { opacity: 0.6 },
   toggleThumb: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff', marginLeft: 2 },
   toggleThumbOn: { marginLeft: 18 },
+  toggleSpinner: { transform: [{ scale: 0.7 }] },
 });

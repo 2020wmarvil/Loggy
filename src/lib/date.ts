@@ -1,5 +1,23 @@
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+
 export const DAYS_S = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export const MONTHS_S = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// A plain `useState(() => new Date())` freezes at mount time and never
+// updates — screens that stay mounted across a day boundary (e.g. Expo
+// Router tabs) would keep showing yesterday's date. Recompute on every
+// foreground so reopening the app after midnight always reflects today.
+export function useToday(): Date {
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setToday(new Date());
+    });
+    return () => sub.remove();
+  }, []);
+  return today;
+}
 
 // Uses local date components (not toISOString) so the "date" always matches
 // the device's calendar day regardless of UTC offset.

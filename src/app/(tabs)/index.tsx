@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
@@ -6,7 +6,7 @@ import { QuoteCard } from '@/components/QuoteCard';
 import { Timeline } from '@/components/Timeline';
 import { WeatherPill } from '@/components/WeatherPill';
 import { WorkoutCard } from '@/components/WorkoutCard';
-import { toDateStr, fmtDate } from '@/lib/date';
+import { toDateStr, fmtDate, useToday } from '@/lib/date';
 import { getLastLog, getTodaySchedule } from '@/lib/progression';
 import { getRoutineForDay, isTimePast } from '@/lib/routine';
 import { useLiftingProgram } from '@/store/useLiftingProgram';
@@ -19,7 +19,7 @@ import { tabBarHeight } from '@/theme/tokens';
 export default function TodayScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const today = useMemo(() => new Date(), []);
+  const today = useToday();
   const todayStr = toDateStr(today);
 
   const { program } = useLiftingProgram();

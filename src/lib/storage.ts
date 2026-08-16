@@ -11,7 +11,6 @@ export const StorageKeys = {
   Maxes: '@loggy/maxes',
   NotificationIds: '@loggy/notification_ids',
   AphorismNotificationIds: '@loggy/aphorism_notification_ids',
-  AphorismNotifScheduledDate: '@loggy/aphorism_notif_scheduled_date',
   Aphorisms: '@loggy/aphorisms',
   AphorismSheetUrl: '@loggy/aphorism_sheet_url',
   AphorismSyncedAt: '@loggy/aphorism_synced_at',

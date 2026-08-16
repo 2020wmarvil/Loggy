@@ -120,8 +120,11 @@ export function calcVolume(sets: SetEntry[]): number {
 
 export function getDailyQuote(date: Date, quotes: Quote[]): Quote | undefined {
   if (!quotes.length) return undefined;
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date.getTime() - start.getTime();
-  const dayOfYear = Math.floor(diff / 86400000);
+  // Date.UTC has no DST, so this is a plain calendar-day count regardless of
+  // the device's local DST transitions (a raw ms-diff / 86400000 undercounts
+  // by a day right after a "spring forward").
+  const start = Date.UTC(date.getFullYear(), 0, 1);
+  const current = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayOfYear = Math.round((current - start) / 86400000);
   return quotes[dayOfYear % quotes.length];
 }

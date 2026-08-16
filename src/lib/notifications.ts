@@ -159,8 +159,14 @@ async function scheduleRoutineLoop(routine: RoutineData): Promise<Record<string,
 // Schedules one weekly-repeating local notification per routine item so
 // reminders fire even when the app isn't open. Returns the routine-item-id ->
 // notification-id map to persist for later cancellation/rescheduling.
+//
+// Disabled for now — routine notifications were noisy/unreliable enough that
+// we're turning them off without ripping out the scheduling code. Aphorism
+// notifications below are unaffected.
+const ROUTINE_NOTIFICATIONS_ENABLED = false;
+
 export async function scheduleRoutineNotifications(routine: RoutineData): Promise<Record<string, string>> {
-  if (!Notifications) return {};
+  if (!Notifications || !ROUTINE_NOTIFICATIONS_ENABLED) return {};
   const ids = await withAlarmCapRecovery('scheduleRoutineNotifications', () => scheduleRoutineLoop(routine));
   logNotifEvent(`scheduleRoutineNotifications scheduled ${ids ? Object.keys(ids).length : 0} item(s)`);
   return ids ?? {};
